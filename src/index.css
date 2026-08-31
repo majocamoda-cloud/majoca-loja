@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-majoca-orange: #FF751F;
+    --color-majoca-terracotta: #BB7F5D;
+    --color-majoca-cream: #FFF9F5;
+    --color-majoca-sand: #F8F3EE;
+    --color-majoca-dark: #2B231D;
+  }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    color: #2B231D;
+    background-color: #FFFFFF;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Poppins', sans-serif;
+  }
+}
+
+/* Custom scrollbars and smooth feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF7F2;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E2D6C8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #BB7F5D;
+}
+
+/* Cart & Thumbnail Fixes */
+.cart-item-thumbnail,
+img.cart-item-thumbnail {
+  aspect-ratio: 3/4 !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Majoca Moda - Loja Virtual Infanto-Juvenil",
+  "description": "Loja virtual e catálogo interativo completo da Majoca Moda com navegação por categorias do RN ao 18 anos, sacola de compras, checkout PIX e TON, LGPD e painel administrativo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
