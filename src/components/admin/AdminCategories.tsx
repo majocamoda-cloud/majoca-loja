@@ -65,6 +65,25 @@ export const AdminCategories: React.FC = () => {
 
   // Modal subcategory input helper
   const [modalSubcatInput, setModalSubcatInput] = useState('');
+  const [modalEditingSubcat, setModalEditingSubcat] = useState<{ index: number; value: string } | null>(null);
+
+  // Common quick-suggest subcategories for fast 1-tap addition
+  const COMMON_SUBCATEGORY_SUGGESTIONS = [
+    'Conjuntos',
+    'Vestidos',
+    'Macacões',
+    'Jardineiras & Rompers',
+    'Camisetas & Blusas',
+    'Calças & Bermudas',
+    'Shorts & Saias',
+    'Bodies',
+    'Pijamas',
+    'Moda Praia',
+    'Casacos & Jaquetas',
+    'Acessórios',
+    'Salopetes',
+    'Calçados & Meias',
+  ];
 
   // Main 3 core categories (Bebê, Infantil, Juvenil)
   const mainCategories = categories.filter((c) => ['bebe', 'infantil', 'juvenil'].includes(c.ageGroup));
@@ -79,12 +98,13 @@ export const AdminCategories: React.FC = () => {
       ageGroup: 'infantil',
       gender: 'unissex',
       description: '',
-      image: '',
+      image: '/images/banner-hero.png',
       tag: 'Tamanhos 01 ao 10',
       ageRange: 'Tamanhos 01 ao 10',
-      subcategories: ['Conjuntos', 'Vestidos', 'Camisetas'],
+      subcategories: ['Conjuntos', 'Vestidos', 'Camisetas & Blusas', 'Calças & Bermudas'],
     });
     setModalSubcatInput('');
+    setModalEditingSubcat(null);
     setIsModalOpen(true);
   };
 
@@ -96,7 +116,26 @@ export const AdminCategories: React.FC = () => {
       subcategories: Array.isArray(cat.subcategories) ? [...cat.subcategories] : [],
     });
     setModalSubcatInput('');
+    setModalEditingSubcat(null);
     setIsModalOpen(true);
+  };
+
+  // Helper to add one or multiple subcategories to modal formData
+  const addSubcategoriesToModalForm = (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    const splitNames = trimmed.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    if (splitNames.length === 0) return;
+
+    setFormData((prev) => {
+      const current = Array.isArray(prev.subcategories) ? [...prev.subcategories] : [];
+      const newItems = splitNames.filter((n) => !current.some((c) => c.toLowerCase() === n.toLowerCase()));
+      return {
+        ...prev,
+        subcategories: [...current, ...newItems],
+      };
+    });
+    setModalSubcatInput('');
   };
 
   // Quick 1-Click Image Upload for any category
@@ -177,6 +216,21 @@ export const AdminCategories: React.FC = () => {
       return;
     }
 
+    // Auto-include any pending subcategory input text that wasn't confirmed
+    let finalSubcategories = Array.isArray(formData.subcategories) ? [...formData.subcategories] : [];
+    if (modalSubcatInput.trim()) {
+      const pendingNames = modalSubcatInput
+        .trim()
+        .split(/[,;\n]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      pendingNames.forEach((name) => {
+        if (!finalSubcategories.some((c) => c.toLowerCase() === name.toLowerCase())) {
+          finalSubcategories.push(name);
+        }
+      });
+    }
+
     const slug = formData.slug.trim() || formData.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
     const finalCategory: CategoryInfo = {
@@ -184,7 +238,7 @@ export const AdminCategories: React.FC = () => {
       slug,
       tag: formData.ageRange || formData.tag || 'Todas as idades',
       ageRange: formData.ageRange || formData.tag || 'Todas as idades',
-      subcategories: formData.subcategories && formData.subcategories.length > 0 ? formData.subcategories : ['Geral'],
+      subcategories: finalSubcategories.length > 0 ? finalSubcategories : ['Geral'],
     };
 
     if (editingCategory) {
@@ -667,10 +721,9 @@ export const AdminCategories: React.FC = () => {
                     className="w-full px-3 py-2 border border-[#BB7F5D]/30 text-[#3D2518] rounded-xl focus:border-[#FF751F] focus:outline-none bg-white"
                   >
                     <option value="bebe">Bebê (RN a 24m)</option>
-                    <option value="primeiros-passos">Primeiros Passos (1 a 3 anos)</option>
-                    <option value="infantil">Infantil (4 a 10 anos)</option>
+                    <option value="infantil">Infantil (01 a 10 anos)</option>
                     <option value="juvenil">Juvenil (12 a 18 anos)</option>
-                    <option value="acessorios">Acessórios</option>
+                    <option value="acessorios">Acessórios & Complementos</option>
                   </select>
                 </div>
 
@@ -704,33 +757,119 @@ export const AdminCategories: React.FC = () => {
               </div>
 
               {/* SUBCATEGORIAS NO FORMULÁRIO */}
-              <div className="space-y-2 pt-2 border-t border-[#BB7F5D]/10">
-                <label className="block font-semibold text-[#5A3825]">
-                  Subcategorias Vinculadas a esta Categoria
-                </label>
-                <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 bg-stone-50 rounded-xl border border-stone-200">
-                  {(formData.subcategories || []).map((sub, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-white border border-[#BB7F5D]/30 text-[#3D2518] px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <span>{sub}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormData({
-                            ...formData,
-                            subcategories: (formData.subcategories || []).filter((_, i) => i !== idx),
-                          })
-                        }
-                        className="text-stone-400 hover:text-rose-600"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+              <div className="space-y-2.5 pt-2 border-t border-[#BB7F5D]/10">
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-[#5A3825]">
+                    Subcategorias Vinculadas ({(formData.subcategories || []).length})
+                  </label>
+                  <span className="text-[10px] text-[#FF751F] font-semibold">
+                    Ex: Conjuntos, Vestidos, Macacões
+                  </span>
                 </div>
 
+                {/* Subcategories Chip List with Inline Edit and Remove */}
+                <div className="flex flex-wrap gap-1.5 min-h-[44px] p-2.5 bg-stone-50 rounded-2xl border border-stone-200/90">
+                  {(!formData.subcategories || formData.subcategories.length === 0) ? (
+                    <span className="text-[11px] text-stone-400 italic my-auto">
+                      Nenhuma subcategoria adicionada. Adicione pelo campo abaixo ou clique nas sugestões.
+                    </span>
+                  ) : (
+                    formData.subcategories.map((sub, idx) => {
+                      const isEditingThis = modalEditingSubcat?.index === idx;
+
+                      if (isEditingThis) {
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-1 bg-white border border-[#FF751F] rounded-lg p-0.5 shadow-2xs"
+                          >
+                            <input
+                              type="text"
+                              value={modalEditingSubcat.value}
+                              onChange={(e) =>
+                                setModalEditingSubcat({
+                                  index: idx,
+                                  value: e.target.value,
+                                })
+                              }
+                              className="px-2 py-0.5 text-xs text-[#3D2518] font-bold w-28 outline-none"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  const val = modalEditingSubcat.value.trim();
+                                  if (val) {
+                                    const updated = [...(formData.subcategories || [])];
+                                    updated[idx] = val;
+                                    setFormData({ ...formData, subcategories: updated });
+                                  }
+                                  setModalEditingSubcat(null);
+                                }
+                                if (e.key === 'Escape') setModalEditingSubcat(null);
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const val = modalEditingSubcat.value.trim();
+                                if (val) {
+                                  const updated = [...(formData.subcategories || [])];
+                                  updated[idx] = val;
+                                  setFormData({ ...formData, subcategories: updated });
+                                }
+                                setModalEditingSubcat(null);
+                              }}
+                              className="p-1 text-emerald-600 hover:text-emerald-800"
+                              title="Salvar alteração"
+                            >
+                              <Check className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModalEditingSubcat(null)}
+                              className="p-1 text-stone-400 hover:text-stone-600"
+                              title="Cancelar"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <span
+                          key={idx}
+                          className="bg-white border border-[#BB7F5D]/30 text-[#3D2518] px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs group hover:border-[#FF751F]/60 transition-colors"
+                        >
+                          <span>{sub}</span>
+                          <button
+                            type="button"
+                            onClick={() => setModalEditingSubcat({ index: idx, value: sub })}
+                            className="text-stone-400 hover:text-[#FF751F] p-0.5 rounded transition-colors"
+                            title="Renomear subcategoria"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormData({
+                                ...formData,
+                                subcategories: (formData.subcategories || []).filter((_, i) => i !== idx),
+                              })
+                            }
+                            className="text-stone-400 hover:text-rose-600 p-0.5 rounded transition-colors"
+                            title="Remover"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Subcategory Input Field (supports comma-separated multiple entries) */}
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
@@ -739,36 +878,44 @@ export const AdminCategories: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (modalSubcatInput.trim()) {
-                          const val = modalSubcatInput.trim();
-                          const current = formData.subcategories || [];
-                          if (!current.includes(val)) {
-                            setFormData({ ...formData, subcategories: [...current, val] });
-                          }
-                          setModalSubcatInput('');
-                        }
+                        addSubcategoriesToModalForm(modalSubcatInput);
                       }
                     }}
-                    placeholder="Digite uma subcategoria (ex: Macacões, Vestidos) e pressione Enter..."
-                    className="flex-1 px-3 py-1.5 border border-[#BB7F5D]/30 rounded-xl text-xs"
+                    placeholder="Digite subcategorias separadas por vírgula (ex: Macacões, Vestidos) e tecle Enter..."
+                    className="flex-1 px-3 py-2 border border-[#BB7F5D]/30 text-[#3D2518] rounded-xl text-xs focus:border-[#FF751F] focus:outline-none bg-white"
                   />
                   <button
                     type="button"
-                    onClick={() => {
-                      if (modalSubcatInput.trim()) {
-                        const val = modalSubcatInput.trim();
-                        const current = formData.subcategories || [];
-                        if (!current.includes(val)) {
-                          setFormData({ ...formData, subcategories: [...current, val] });
-                        }
-                        setModalSubcatInput('');
-                      }
-                    }}
-                    className="bg-[#FF751F] text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 shrink-0"
+                    onClick={() => addSubcategoriesToModalForm(modalSubcatInput)}
+                    className="bg-[#FF751F] hover:bg-[#e06316] text-white px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer shadow-2xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-4 h-4" />
                     <span>Adicionar</span>
                   </button>
+                </div>
+
+                {/* Quick Sugestions Chips */}
+                <div className="space-y-1 pt-1">
+                  <span className="text-[10px] font-bold text-stone-500 block">
+                    Sugestões rápidas (clique para incluir):
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {COMMON_SUBCATEGORY_SUGGESTIONS.filter(
+                      (s) => !(formData.subcategories || []).some((c) => c.toLowerCase() === s.toLowerCase())
+                    )
+                      .slice(0, 8)
+                      .map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onClick={() => addSubcategoriesToModalForm(suggestion)}
+                          className="bg-orange-50 hover:bg-orange-100 text-[#FF751F] border border-[#FF751F]/30 px-2 py-0.5 rounded-lg text-[10px] font-semibold flex items-center gap-0.5 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-2.5 h-2.5" />
+                          <span>{suggestion}</span>
+                        </button>
+                      ))}
+                  </div>
                 </div>
               </div>
 

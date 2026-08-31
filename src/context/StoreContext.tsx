@@ -595,46 +595,88 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addSubcategoryToCategory = (categoryId: string, subcategoryName: string) => {
     const trimmed = subcategoryName.trim();
     if (!trimmed) return;
+    const names = trimmed.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0) return;
+
     setCategories((prev) => {
       const next = prev.map((c) => {
-        if (c.id === categoryId) {
-          const current = c.subcategories || [];
-          if (current.includes(trimmed)) return c;
-          return { ...c, subcategories: [...current, trimmed] };
+        if (c.id === categoryId || c.ageGroup === categoryId || c.slug === categoryId) {
+          const current = Array.isArray(c.subcategories) ? [...c.subcategories] : [];
+          const toAdd = names.filter((n) => !current.includes(n));
+          if (toAdd.length === 0) return c;
+          return { ...c, subcategories: [...current, ...toAdd] };
         }
         return c;
       });
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
       return next;
     });
+
+    showToast(
+      names.length > 1
+        ? `${names.length} subcategorias adicionadas com sucesso!`
+        : `Subcategoria "${names[0]}" vinculada à categoria!`,
+      'success'
+    );
   };
 
   const removeSubcategoryFromCategory = (categoryId: string, subcategoryName: string) => {
     setCategories((prev) => {
       const next = prev.map((c) => {
-        if (c.id === categoryId) {
-          return { ...c, subcategories: (c.subcategories || []).filter((s) => s !== subcategoryName) };
+        if (c.id === categoryId || c.ageGroup === categoryId || c.slug === categoryId) {
+          return {
+            ...c,
+            subcategories: (c.subcategories || []).filter((s) => s !== subcategoryName),
+          };
         }
         return c;
       });
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
       return next;
     });
+    showToast(`Subcategoria "${subcategoryName}" removida da categoria.`, 'info');
   };
 
   const updateSubcategoryInCategory = (categoryId: string, oldName: string, newName: string) => {
     const trimmed = newName.trim();
-    if (!trimmed) return;
+    if (!trimmed || trimmed === oldName) return;
+
     setCategories((prev) => {
       const next = prev.map((c) => {
-        if (c.id === categoryId) {
-          return { ...c, subcategories: (c.subcategories || []).map((s) => (s === oldName ? trimmed : s)) };
+        if (c.id === categoryId || c.ageGroup === categoryId || c.slug === categoryId) {
+          return {
+            ...c,
+            subcategories: (c.subcategories || []).map((s) => (s === oldName ? trimmed : s)),
+          };
         }
         return c;
       });
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
       return next;
     });
+
+    // Atualiza também os produtos existentes que usavam o nome antigo para manter os vínculos íntegros
+    setProducts((prev) => {
+      let changed = false;
+      const updated = prev.map((p) => {
+        const matchesCategory =
+          p.category === categoryId ||
+          categories.find((c) => c.id === categoryId)?.ageGroup === p.category;
+
+        if (p.subCategoryName === oldName && matchesCategory) {
+          changed = true;
+          return { ...p, subCategoryName: trimmed };
+        }
+        return p;
+      });
+
+      if (changed) {
+        saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
+      }
+      return updated;
+    });
+
+    showToast(`Subcategoria renomeada para "${trimmed}" com sucesso!`, 'success');
   };
 
   const updateSettings = (newSettings: Partial<StoreSettings>) => {
