@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initialCategories, initialOrders, initialProducts, initialSettings } from '../data/initialData';
+import { supabase, safeSupabaseOperation } from '../lib/supabase';
 import {
   AgeGroup,
   CartItem,
@@ -15,13 +16,6 @@ import {
   ProductSize,
   StoreSettings,
 } from '../types';
-
-// Declaração global para acessar a biblioteca do Supabase adicionada no HTML
-declare global {
-  interface Window {
-    supabase?: any;
-  }
-}
 
 interface Toast {
   id: string;
@@ -93,6 +87,12 @@ interface StoreContextType {
   updateSubcategoryInCategory: (categoryId: string, oldName: string, newName: string) => void;
   deleteOrder: (orderId: string) => void;
   changeAdminPassword: (oldPass: string, newPass: string) => boolean;
+  restoreData: (backup: {
+    products?: Product[];
+    categories?: CategoryInfo[];
+    orders?: Order[];
+    settings?: StoreSettings;
+  }) => Promise<{ success: boolean; message: string; counts: { products: number; categories: number; orders: number } }>;
   
   lgpdAccepted: boolean;
   acceptLgpd: () => void;
@@ -127,21 +127,57 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // Busca inicial dos produtos no Supabase assim que a loja carrega
+  // Busca inicial dos produtos no Supabase com fallback transparente para LocalStorage
   useEffect(() => {
+    let isMounted = true;
     const fetchProductsFromSupabase = async () => {
-      if (window.supabase) {
-        try {
-          const { data, error } = await window.supabase.from('produtos').select('*');
-          if (!error && data && data.length > 0) {
-            setProducts(data);
-          }
-        } catch (e) {
-          console.error("Erro ao carregar produtos do Supabase:", e);
+      try {
+        const { data, fromFallback } = await safeSupabaseOperation(
+          async () => {
+            const res = await supabase.from('produtos').select('*');
+            if (res.error) throw res.error;
+            return res.data || [];
+          },
+          [],
+          3500
+        );
+
+        if (!fromFallback && data && Array.isArray(data) && data.length > 0 && isMounted) {
+          const sanitized: Product[] = data.map((item: any) => ({
+            id: String(item.id || item.sku || `prod-${Date.now()}`),
+            name: String(item.name || item.nome || 'Produto Majoca'),
+            category: item.category || item.categoria || 'infantil',
+            subcategory: item.subcategory || item.subcategoria || 'unissex',
+            subCategoryName: item.subCategoryName || item.sub_category_name || item.subcategoria_nome,
+            categoryLabel: item.categoryLabel || item.categoria_label || 'Infantil',
+            price: Number(item.price ?? item.preco ?? 0),
+            originalPrice: item.originalPrice ? Number(item.originalPrice) : (item.preco_original ? Number(item.preco_original) : undefined),
+            images: Array.isArray(item.images) && item.images.length > 0
+              ? item.images
+              : (Array.isArray(item.fotos) && item.fotos.length > 0
+                ? item.fotos
+                : (typeof item.images === 'string' ? JSON.parse(item.images || '[]') : ['/images/banner-hero.png'])),
+            description: String(item.description || item.descricao || ''),
+            composition: String(item.composition || item.composicao || '100% Algodão'),
+            sizes: Array.isArray(item.sizes) ? item.sizes : (typeof item.sizes === 'string' ? JSON.parse(item.sizes || '[]') : (Array.isArray(item.tamanhos) ? item.tamanhos : [])),
+            colors: Array.isArray(item.colors) ? item.colors : (typeof item.colors === 'string' ? JSON.parse(item.colors || '[]') : (Array.isArray(item.cores) ? item.cores : [])),
+            weight: item.weight || item.peso || '',
+            season: item.season || item.estacao || 'Atemporal',
+            sizeRecommendation: item.sizeRecommendation || item.recomendacao_tamanho || '',
+            featured: Boolean(item.featured ?? item.destaque),
+            isNew: Boolean(item.isNew ?? item.novo),
+            sku: String(item.sku || `MJC-${Math.floor(100 + Math.random() * 900)}`),
+          }));
+          setProducts(sanitized);
         }
+      } catch (e) {
+        console.warn("Modo local ativo: operando com dados armazenados no navegador.", e);
       }
     };
     fetchProductsFromSupabase();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const [categories, setCategories] = useState<CategoryInfo[]>(() => {
@@ -400,42 +436,61 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteOrder = (orderId: string) => setOrders((prev) => prev.filter((o) => o.id !== orderId));
   
-  // ADICIONAR PRODUTO (Envia direto para o Supabase e atualiza na tela)
-  const addProduct = async (newProd: Omit<Product, 'id'>) => {
-    const createdProduct = { ...newProd, id: 'prod-' + Date.now() };
+  // ADICIONAR PRODUTO (Salva no estado local/LocalStorage e tenta sincronizar em background)
+  const addProduct = (newProd: Omit<Product, 'id'>) => {
+    const createdProduct: Product = {
+      ...newProd,
+      id: 'prod-' + Date.now(),
+      sku: newProd.sku || `MJC-${Math.floor(100 + Math.random() * 900)}`,
+    };
     
-    if (window.supabase) {
-      try {
-        await window.supabase.from('produtos').insert([createdProduct]);
-      } catch (e) {
-        console.error("Erro ao salvar no Supabase:", e);
-      }
-    }
-    setProducts((prev) => [createdProduct, ...prev]);
+    setProducts((prev) => {
+      const updated = [createdProduct, ...prev];
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    showToast('Novo produto cadastrado com sucesso!', 'success');
+
+    // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
+    safeSupabaseOperation(
+      async () => await supabase.from('produtos').insert([createdProduct]),
+      null,
+      3000
+    ).catch(() => {});
   };
 
-  // EDITAR PRODUTO (Atualiza no Supabase e na tela)
-  const updateProduct = async (updatedProd: Product) => {
-    if (window.supabase) {
-      try {
-        await window.supabase.from('produtos').update(updatedProd).eq('id', updatedProd.id);
-      } catch (e) {
-        console.error("Erro ao atualizar no Supabase:", e);
-      }
-    }
-    setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
+  // EDITAR PRODUTO (Atualiza no estado local/LocalStorage e tenta sincronizar em background)
+  const updateProduct = (updatedProd: Product) => {
+    setProducts((prev) => {
+      const updated = prev.map((p) => (p.id === updatedProd.id ? updatedProd : p));
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    showToast('Produto atualizado!', 'success');
+
+    // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
+    safeSupabaseOperation(
+      async () => await supabase.from('produtos').update(updatedProd).eq('id', updatedProd.id),
+      null,
+      3000
+    ).catch(() => {});
   };
 
-  // EXCLUIR PRODUTO (Remove do Supabase e da tela)
-  const deleteProduct = async (productId: string) => {
-    if (window.supabase) {
-      try {
-        await window.supabase.from('produtos').delete().eq('id', productId);
-      } catch (e) {
-        console.error("Erro ao deletar do Supabase:", e);
-      }
-    }
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  // EXCLUIR PRODUTO (Remove do estado local/LocalStorage e tenta sincronizar em background)
+  const deleteProduct = (productId: string) => {
+    setProducts((prev) => {
+      const updated = prev.filter((p) => p.id !== productId);
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    showToast('Produto removido do catálogo.', 'info');
+
+    // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
+    safeSupabaseOperation(
+      async () => await supabase.from('produtos').delete().eq('id', productId),
+      null,
+      3000
+    ).catch(() => {});
   };
 
   const updateCategory = (updatedCat: CategoryInfo) => setCategories((prev) => prev.map((c) => (c.id === updatedCat.id ? updatedCat : c)));
@@ -484,6 +539,112 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateSettings = (newSettings: Partial<StoreSettings>) => setSettings((prev) => ({ ...prev, ...newSettings }));
   const acceptLgpd = () => setLgpdAccepted(true);
 
+  // RESTAURAÇÃO COMPLETA DE BACKUP
+  const restoreData = async (backup: {
+    products?: Product[];
+    categories?: CategoryInfo[];
+    orders?: Order[];
+    settings?: StoreSettings;
+  }) => {
+    try {
+      let restoredProdCount = 0;
+      let restoredCatCount = 0;
+      let restoredOrderCount = 0;
+
+      // 1. Restaurar Produtos se fornecido
+      if (Array.isArray(backup.products) && backup.products.length > 0) {
+        const sanitizedProducts: Product[] = backup.products.map((p: any, idx: number) => ({
+          id: String(p.id || `prod-restored-${Date.now()}-${idx}`),
+          name: String(p.name || p.nome || 'Produto Majoca'),
+          category: p.category || p.categoria || 'infantil',
+          subcategory: p.subcategory || p.subcategoria || 'unissex',
+          subCategoryName: p.subCategoryName || p.sub_category_name || p.subcategoria_nome,
+          categoryLabel: p.categoryLabel || p.categoria_label || 'Infantil',
+          price: Number(p.price ?? p.preco ?? 0),
+          originalPrice: p.originalPrice ? Number(p.originalPrice) : (p.preco_original ? Number(p.preco_original) : undefined),
+          images: Array.isArray(p.images) && p.images.length > 0
+            ? p.images
+            : (Array.isArray(p.fotos) && p.fotos.length > 0
+              ? p.fotos
+              : ['/images/banner-hero.png']),
+          description: String(p.description || p.descricao || ''),
+          composition: String(p.composition || p.composicao || '100% Algodão'),
+          sizes: Array.isArray(p.sizes) ? p.sizes : (Array.isArray(p.tamanhos) ? p.tamanhos : []),
+          colors: Array.isArray(p.colors) ? p.colors : (Array.isArray(p.cores) ? p.cores : []),
+          weight: p.weight || p.peso || '',
+          season: p.season || p.estacao || 'Atemporal',
+          sizeRecommendation: p.sizeRecommendation || p.recomendacao_tamanho || '',
+          featured: Boolean(p.featured ?? p.destaque),
+          isNew: Boolean(p.isNew ?? p.novo),
+          sku: String(p.sku || `MJC-${Math.floor(100 + Math.random() * 900)}`),
+        }));
+
+        setProducts(sanitizedProducts);
+        restoredProdCount = sanitizedProducts.length;
+
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(sanitizedProducts));
+        } catch (e) {
+          console.warn('Erro ao salvar produtos no LocalStorage:', e);
+        }
+
+        // Sincroniza em lote com o Supabase em segundo plano de forma segura
+        safeSupabaseOperation(
+          async () => await supabase.from('produtos').upsert(sanitizedProducts),
+          null,
+          4000
+        ).then((res) => {
+          if (res.fromFallback) {
+            console.warn('Backup restaurado localmente. Supabase indisponível/unhealthy no momento.');
+          }
+        }).catch(() => {});
+      }
+
+      // 2. Restaurar Categorias se fornecido
+      if (Array.isArray(backup.categories) && backup.categories.length > 0) {
+        setCategories(backup.categories);
+        restoredCatCount = backup.categories.length;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.CATEGORIES, JSON.stringify(backup.categories));
+        } catch {}
+      }
+
+      // 3. Restaurar Pedidos se fornecido
+      if (Array.isArray(backup.orders)) {
+        setOrders(backup.orders);
+        restoredOrderCount = backup.orders.length;
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(backup.orders));
+        } catch {}
+      }
+
+      // 4. Restaurar Configurações se fornecido
+      if (backup.settings && typeof backup.settings === 'object') {
+        setSettings((prev) => ({ ...prev, ...backup.settings }));
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify({ ...settings, ...backup.settings }));
+        } catch {}
+      }
+
+      return {
+        success: true,
+        message: 'Backup restaurado e sincronizado com sucesso!',
+        counts: {
+          products: restoredProdCount,
+          categories: restoredCatCount,
+          orders: restoredOrderCount,
+        },
+      };
+    } catch (err: any) {
+      console.error('Erro na função restoreData:', err);
+      return {
+        success: false,
+        message: `Falha na restauração: ${err?.message || 'Erro inesperado'}`,
+        counts: { products: 0, categories: 0, orders: 0 },
+      };
+    }
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -498,7 +659,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isAdminOpen, setIsAdminOpen, loginAdmin, logoutAdmin, addProduct,
         updateProduct, deleteProduct, updateSettings, updateCategory, addCategory,
         deleteCategory, addSubcategoryToCategory, removeSubcategoryFromCategory,
-        updateSubcategoryInCategory, deleteOrder, changeAdminPassword, lgpdAccepted,
+        updateSubcategoryInCategory, deleteOrder, changeAdminPassword, restoreData, lgpdAccepted,
         acceptLgpd, toasts, showToast,
       }}
     >

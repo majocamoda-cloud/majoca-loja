@@ -12,12 +12,13 @@ import {
   Layers,
   Calculator,
   Download,
+  Database,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { exportInventoryReportPDF } from '../../utils/pdfGenerator';
 
 interface AdminDashboardProps {
-  onNavigateToTab: (tab: 'products' | 'categories' | 'orders' | 'reports' | 'pricing' | 'banners') => void;
+  onNavigateToTab: (tab: 'products' | 'categories' | 'orders' | 'reports' | 'pricing' | 'banners' | 'backup' | 'settings') => void;
   onQuickAddProduct: () => void;
 }
 
@@ -315,6 +316,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className="w-full bg-white/20 hover:bg-white/30 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <span>Gerenciar Categorias</span>
+            </button>
+
+            <button
+              onClick={() => onNavigateToTab('backup')}
+              className="w-full bg-emerald-700/60 hover:bg-emerald-700/80 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-emerald-400/30"
+            >
+              <Database className="w-4 h-4" />
+              <span>Backup & Restauração JSON</span>
             </button>
           </div>
         </div>

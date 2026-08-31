@@ -12,6 +12,7 @@ import {
   Settings,
   TrendingUp,
   Calculator,
+  Database,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { AdminDashboard } from './AdminDashboard';
@@ -22,12 +23,13 @@ import { AdminReports } from './AdminReports';
 import { AdminPricingCalculator } from './AdminPricingCalculator';
 import { AdminBannersContent } from './AdminBannersContent';
 import { AdminSettings } from './AdminSettings';
+import { AdminBackupRestore } from './AdminBackupRestore';
 import { AdminLoginModal } from './AdminLoginModal';
 import { BrandLogo } from '../BrandLogo';
 
 export const AdminPanel: React.FC = () => {
   const { isAdminOpen, setIsAdminOpen, isAdminLoggedIn, logoutAdmin, changeAdminPassword, showToast } = useStore();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'reports' | 'pricing' | 'banners' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'products' | 'categories' | 'orders' | 'reports' | 'pricing' | 'banners' | 'backup' | 'settings'>('dashboard');
   const [openProductCreateDirect, setOpenProductCreateDirect] = useState(false);
   
   // Quick password modal state
@@ -245,6 +247,21 @@ export const AdminPanel: React.FC = () => {
 
           <button
             onClick={() => {
+              setActiveTab('backup');
+              setOpenProductCreateDirect(false);
+            }}
+            className={`py-3.5 px-4 text-xs font-bold flex items-center gap-2 border-b-2 transition-all shrink-0 ${
+              activeTab === 'backup'
+                ? 'border-[#FF751F] text-[#FF751F]'
+                : 'border-transparent text-[#5A3825] hover:text-[#FF751F]'
+            }`}
+          >
+            <Database className="w-4 h-4" />
+            <span>8. Backup & Restauração</span>
+          </button>
+
+          <button
+            onClick={() => {
               setActiveTab('settings');
               setOpenProductCreateDirect(false);
             }}
@@ -255,7 +272,7 @@ export const AdminPanel: React.FC = () => {
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>8. Configurações & Senha</span>
+            <span>9. Configurações & Senha</span>
           </button>
         </div>
 
@@ -281,6 +298,8 @@ export const AdminPanel: React.FC = () => {
           {activeTab === 'pricing' && <AdminPricingCalculator />}
 
           {activeTab === 'banners' && <AdminBannersContent />}
+
+          {activeTab === 'backup' && <AdminBackupRestore />}
 
           {activeTab === 'settings' && <AdminSettings />}
         </div>
