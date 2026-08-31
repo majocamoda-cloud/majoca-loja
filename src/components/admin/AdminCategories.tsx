@@ -77,7 +77,7 @@ export const AdminCategories: React.FC = () => {
       ageGroup: 'infantil',
       gender: 'unissex',
       description: '',
-      image: 'https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?auto=format&fit=crop&w=600&q=80',
+      image: '',
       tag: 'Tamanhos 01 ao 10',
       ageRange: 'Tamanhos 01 ao 10',
       subcategories: ['Conjuntos', 'Vestidos', 'Camisetas'],

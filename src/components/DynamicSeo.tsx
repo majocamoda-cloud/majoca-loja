@@ -10,8 +10,7 @@ export const DynamicSeo: React.FC = () => {
       'Loja de moda infantil e juvenil em Ubá/MG. Roupas confortáveis, estilosas e de alta qualidade do RN ao 18 anos. Entrega rápida e retirada em Ubá.';
     let keywords =
       'majoca moda, moda infantil ubá, loja de roupa infantil ubá mg, roupas de bebe uba, moda juvenil uba, rn ao 18 anos, vestidos infantis, conjuntos infantis';
-    let ogImage =
-      'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&q=80&w=1200';
+    let ogImage = settings.heroImage || '';
 
     // 1. If product is open in modal
     if (selectedProduct) {

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ArrowRight, Heart, MapPin, Shield, Upload, Link as LinkIcon, Camera, X } from 'lucide-react';
+import { ArrowRight, Heart, MapPin, Shield, Upload, Link as LinkIcon, Camera, X, Sparkles } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 
 export const HeroBanner: React.FC = () => {
@@ -133,13 +133,27 @@ export const HeroBanner: React.FC = () => {
           <div className="relative flex flex-col items-center justify-center">
             <div className="group relative w-full max-w-lg lg:max-w-none rounded-3xl overflow-hidden shadow-xl border-4 border-white bg-orange-50/50 aspect-[4/3] sm:aspect-[16/11]">
               
-              {/* Imagem do Banner */}
-              <img
-                src={settings.heroImage}
-                alt="Majoca Moda - Bebês, Crianças e Adolescentes com conforto e estilo"
-                className="w-full h-full object-cover object-center transform group-hover:scale-102 transition-transform duration-700"
-                loading="eager"
-              />
+              {/* Imagem do Banner ou Card Neutro com Identidade Majoca */}
+              {settings.heroImage ? (
+                <img
+                  src={settings.heroImage}
+                  alt={settings.heroTitle || 'Majoca Moda'}
+                  className="w-full h-full object-cover object-center transform group-hover:scale-102 transition-transform duration-700"
+                  loading="eager"
+                />
+              ) : (
+                <div className="w-full h-full min-h-[260px] flex flex-col items-center justify-center p-8 text-center bg-gradient-to-br from-orange-50 via-white to-amber-50/60 border border-[#BB7F5D]/20">
+                  <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#FF751F] to-[#BB7F5D] text-white flex items-center justify-center mb-4 shadow-md shadow-orange-500/20">
+                    <Sparkles className="w-8 h-8" />
+                  </div>
+                  <h3 className="font-heading font-extrabold text-xl text-[#3D2518]">
+                    {settings.storeName || 'Majoca Moda'}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#5A3825] max-w-sm mt-1.5 leading-relaxed font-medium">
+                    Do RN ao 18 anos • Vista quem você ama com carinho, estilo e aconchego.
+                  </p>
+                </div>
+              )}
 
               {/* Botão de Trocar Imagem do Banner */}
               <div className="absolute bottom-3 right-3 flex items-center gap-2 bg-[#2B1B12]/80 backdrop-blur-xs p-1.5 rounded-2xl border border-white/20 shadow-lg">

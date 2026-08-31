@@ -70,11 +70,17 @@ export const CartDrawer: React.FC = () => {
                     key={`${product.id}-${item.selectedSize}-${index}`}
                     className="flex gap-4 p-3.5 bg-[#FFF9F5] rounded-2xl border border-[#BB7F5D]/20 shadow-sm relative group"
                   >
-                    <img
-                      src={product.images?.[0] || 'https://via.placeholder.com/150'}
-                      alt={product.name}
-                      className="w-20 h-24 object-cover rounded-xl border border-stone-200 cart-item-thumbnail shrink-0"
-                    />
+                    {product.images?.[0] ? (
+                      <img
+                        src={product.images[0]}
+                        alt={product.name}
+                        className="w-20 h-24 object-cover rounded-xl border border-stone-200 cart-item-thumbnail shrink-0"
+                      />
+                    ) : (
+                      <div className="w-20 h-24 rounded-xl border border-stone-200 bg-orange-50 flex items-center justify-center text-[#FF751F] shrink-0">
+                        <ShoppingBag className="w-8 h-8 opacity-60" />
+                      </div>
+                    )}
 
                     <div className="flex-1 flex flex-col justify-between min-w-0">
                       <div>

@@ -34,24 +34,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       className="group bg-white rounded-2xl border border-[#BB7F5D]/20 shadow-2xs hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col overflow-hidden cursor-pointer"
     >
       {/* IMAGE CONTAINER (3:4 PORTRAIT LOCK) */}
-      <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-100">
-        <img
-          src={product.images[0]}
-          alt={product.name}
-          className={`w-full h-full object-cover object-center transition-all duration-500 ${
-            product.images[1] ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
-          }`}
-          loading="lazy"
-        />
+      <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-100 flex items-center justify-center">
+        {product.images?.[0] ? (
+          <>
+            <img
+              src={product.images[0]}
+              alt={product.name}
+              className={`w-full h-full object-cover object-center transition-all duration-500 ${
+                product.images[1] ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
+              }`}
+              loading="lazy"
+            />
 
-        {/* Secondary Image on Hover (Foto 2 / Conjunto completo) */}
-        {product.images[1] && (
-          <img
-            src={product.images[1]}
-            alt={`${product.name} - Conjunto`}
-            className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 pointer-events-none"
-            loading="lazy"
-          />
+            {/* Secondary Image on Hover (Foto 2 / Conjunto completo) */}
+            {product.images[1] && (
+              <img
+                src={product.images[1]}
+                alt={`${product.name} - Conjunto`}
+                className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 pointer-events-none"
+                loading="lazy"
+              />
+            )}
+          </>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-orange-50/50 text-[#FF751F]">
+            <ShoppingBag className="w-12 h-12 opacity-60 mb-2" />
+            <span className="text-[11px] font-bold text-[#3D2518] text-center line-clamp-2 px-2">
+              {product.name}
+            </span>
+          </div>
         )}
 
         {/* Top Badges */}

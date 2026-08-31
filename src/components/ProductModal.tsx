@@ -110,12 +110,21 @@ export const ProductModal: React.FC = () => {
         <div className="md:w-1/2 bg-orange-50/30 p-4 sm:p-6 flex flex-col justify-between border-b md:border-b-0 md:border-r border-[#BB7F5D]/20 overflow-y-auto">
           <div>
             {/* Main Large Image (3:4 Aspect Ratio) */}
-            <div className="relative aspect-[3/4] w-full max-h-[460px] rounded-2xl overflow-hidden bg-stone-100 shadow-inner border border-[#BB7F5D]/10 mx-auto">
-              <img
-                src={selectedProduct.images[activeImageIdx] || selectedProduct.images[0]}
-                alt={selectedProduct.name}
-                className="w-full h-full object-cover object-center transition-all duration-300"
-              />
+            <div className="relative aspect-[3/4] w-full max-h-[460px] rounded-2xl overflow-hidden bg-stone-100 shadow-inner border border-[#BB7F5D]/10 mx-auto flex items-center justify-center">
+              {selectedProduct.images?.[activeImageIdx] || selectedProduct.images?.[0] ? (
+                <img
+                  src={selectedProduct.images[activeImageIdx] || selectedProduct.images[0]}
+                  alt={selectedProduct.name}
+                  className="w-full h-full object-cover object-center transition-all duration-300"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-orange-50/50 text-[#FF751F]">
+                  <ShoppingBag className="w-16 h-16 opacity-50 mb-3" />
+                  <span className="text-sm font-bold text-[#3D2518] text-center">
+                    {selectedProduct.name}
+                  </span>
+                </div>
+              )}
               
               {/* Badges */}
               <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
@@ -159,31 +168,33 @@ export const ProductModal: React.FC = () => {
             </div>
 
             {/* 4-Slots Miniatures Grid (3:4 ratio thumbnails) */}
-            <div className="mt-3">
-              <div className="text-[10px] font-bold text-[#5A3825] uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>Galeria de Fotos ({selectedProduct.images.length} {selectedProduct.images.length === 1 ? 'foto' : 'fotos'}):</span>
-                <span className="text-[#BB7F5D] lowercase text-[10px]">proporção 3:4</span>
+            {selectedProduct.images && selectedProduct.images.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] font-bold text-[#5A3825] uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Galeria de Fotos ({selectedProduct.images.length} {selectedProduct.images.length === 1 ? 'foto' : 'fotos'}):</span>
+                  <span className="text-[#BB7F5D] lowercase text-[10px]">proporção 3:4</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {selectedProduct.images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIdx(idx)}
+                      className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 transition-all cursor-pointer flex flex-col justify-end p-1 text-left ${
+                        activeImageIdx === idx
+                          ? 'border-[#FF751F] shadow-sm ring-2 ring-[#FF751F]/30 scale-102'
+                          : 'border-[#BB7F5D]/20 opacity-75 hover:opacity-100 hover:border-[#BB7F5D]'
+                      }`}
+                    >
+                      <img src={img} alt={`Foto ${idx + 1}`} className="absolute inset-0 w-full h-full object-cover object-center" />
+                      <div className="relative z-10 bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1 py-0.5 rounded text-center truncate">
+                        {idx === 0 ? 'Capa' : idx === 1 ? 'Conjunto' : idx === 2 ? 'Acessórios' : 'Detalhes'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-4 gap-2">
-                {selectedProduct.images.map((img, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setActiveImageIdx(idx)}
-                    className={`relative aspect-[3/4] rounded-xl overflow-hidden border-2 transition-all cursor-pointer flex flex-col justify-end p-1 text-left ${
-                      activeImageIdx === idx
-                        ? 'border-[#FF751F] shadow-sm ring-2 ring-[#FF751F]/30 scale-102'
-                        : 'border-[#BB7F5D]/20 opacity-75 hover:opacity-100 hover:border-[#BB7F5D]'
-                    }`}
-                  >
-                    <img src={img} alt={`Foto ${idx + 1}`} className="absolute inset-0 w-full h-full object-cover object-center" />
-                    <div className="relative z-10 bg-black/60 backdrop-blur-xs text-white text-[9px] font-bold px-1 py-0.5 rounded text-center truncate">
-                      {idx === 0 ? 'Capa' : idx === 1 ? 'Conjunto' : idx === 2 ? 'Acessórios' : 'Detalhes'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-3 pt-2 border-t border-[#BB7F5D]/10 text-center">

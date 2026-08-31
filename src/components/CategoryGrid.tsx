@@ -39,132 +39,153 @@ export const CategoryGrid: React.FC = () => {
           </p>
         </div>
 
-        {/* 3 Main Featured Categories Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
-          {mainCategories.map((cat) => {
-            const count = products.filter((p) => p.category === cat.ageGroup).length;
+        {/* Categories Display or Clean Neutral State */}
+        {categories.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-3xl border border-[#BB7F5D]/20 p-8 shadow-xs max-w-xl mx-auto">
+            <div className="w-14 h-14 bg-orange-50 text-[#FF751F] rounded-full flex items-center justify-center mx-auto mb-3.5">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <h3 className="font-heading font-bold text-lg text-[#3D2518]">
+              Departamentos & Categorias
+            </h3>
+            <p className="text-xs sm:text-sm text-[#5A3825] mt-1.5 leading-relaxed max-w-md mx-auto">
+              Nenhuma categoria cadastrada no momento. Configure os departamentos (Bebê, Infantil, Juvenil, Acessórios) e suas fotos no Painel Administrativo.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+            {mainCategories.map((cat) => {
+              const count = products.filter((p) => p.category === cat.ageGroup).length;
 
-            return (
-              <div
-                key={cat.id}
-                className="group bg-white rounded-3xl border border-[#BB7F5D]/20 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5 flex flex-col overflow-hidden"
-              >
-                {/* 1. [FOTO DA CATEGORIA NO TOPO DO CARD - ENQUADRAMENTO AJUSTADO SEM CORTAR CABEÇA/TOPO] */}
-                <div 
-                  onClick={() => handleSelectCategory(cat.ageGroup, cat.gender)}
-                  className="relative aspect-[4/3] sm:aspect-[16/11] w-full overflow-hidden bg-[#FAF5EE] cursor-pointer flex items-center justify-center"
+              return (
+                <div
+                  key={cat.id}
+                  className="group bg-white rounded-3xl border border-[#BB7F5D]/20 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1.5 flex flex-col overflow-hidden"
                 >
-                  <img
-                    src={cat.image}
-                    alt={cat.name}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                  />
-                  
-                  {/* Subtle top badge for Age Tag */}
-                  <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-xs text-[#3D2518] text-xs font-extrabold px-3 py-1 rounded-full shadow-sm border border-[#BB7F5D]/20">
-                    {cat.tag || cat.ageRange}
-                  </div>
-
-                  {/* Stock count badge */}
-                  <div className="absolute top-4 right-4 bg-[#2B1B12]/75 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm">
-                    {count} {count === 1 ? 'peça' : 'peças'}
-                  </div>
-                </div>
-
-                {/* 2. [CORPO DO CARD: TÍTULO / FAIXA DE TAMANHO + DESCRIÇÃO CURTA + BOTÃO] */}
-                <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    {/* Faixa de Tamanho Subtitle */}
-                    <span className="text-xs font-bold text-[#FF751F] uppercase tracking-wider block">
-                      {cat.tag || cat.ageRange}
-                    </span>
-
-                    {/* Título da Categoria */}
-                    <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-[#3D2518] mt-1 group-hover:text-[#FF751F] transition-colors">
-                      Moda {cat.name}
-                    </h3>
-
-                    {/* Descrição Curta */}
-                    <p className="text-xs sm:text-sm text-[#5A3825] leading-relaxed mt-2 line-clamp-2">
-                      {cat.description || 'Peças confortáveis e cheias de estilo para esta faixa de idade.'}
-                    </p>
-
-                    {/* Subcategorias Chips */}
-                    {cat.subcategories && cat.subcategories.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-[#BB7F5D]/10">
-                        {cat.subcategories.slice(0, 4).map((sub) => (
-                          <button
-                            key={sub}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectCategory(cat.ageGroup, 'todas', sub);
-                            }}
-                            className="bg-orange-50 hover:bg-[#FF751F] text-[#5A3825] hover:text-white px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-[#BB7F5D]/15"
-                          >
-                            {sub}
-                          </button>
-                        ))}
+                  {/* 1. [FOTO DA CATEGORIA NO TOPO DO CARD - ENQUADRAMENTO AJUSTADO SEM CORTAR CABEÇA/TOPO] */}
+                  <div 
+                    onClick={() => handleSelectCategory(cat.ageGroup, cat.gender)}
+                    className="relative aspect-[4/3] sm:aspect-[16/11] w-full overflow-hidden bg-[#FAF5EE] cursor-pointer flex items-center justify-center"
+                  >
+                    {cat.image ? (
+                      <img
+                        src={cat.image}
+                        alt={cat.name}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-orange-50/50">
+                        <ShoppingBag className="w-10 h-10 text-[#FF751F] mb-1 opacity-70" />
+                        <span className="text-xs font-bold text-[#3D2518]">{cat.name}</span>
                       </div>
                     )}
+                    
+                    {/* Subtle top badge for Age Tag */}
+                    <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-xs text-[#3D2518] text-xs font-extrabold px-3 py-1 rounded-full shadow-sm border border-[#BB7F5D]/20">
+                      {cat.tag || cat.ageRange}
+                    </div>
+
+                    {/* Stock count badge */}
+                    <div className="absolute top-4 right-4 bg-[#2B1B12]/75 backdrop-blur-xs text-white text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm">
+                      {count} {count === 1 ? 'peça' : 'peças'}
+                    </div>
                   </div>
 
-                  <div className="space-y-3 pt-2">
-                    {/* Botão 'Ver produtos' */}
-                    <button
-                      type="button"
-                      onClick={() => handleSelectCategory(cat.ageGroup, cat.gender)}
-                      className="w-full bg-[#FF751F] hover:bg-[#e06316] text-white py-3 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-orange-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer group-hover:bg-[#e06316]"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>Ver produtos</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform ml-1" />
-                    </button>
+                  {/* 2. [CORPO DO CARD: TÍTULO / FAIXA DE TAMANHO + DESCRIÇÃO CURTA + BOTÃO] */}
+                  <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                    <div>
+                      {/* Faixa de Tamanho Subtitle */}
+                      <span className="text-xs font-bold text-[#FF751F] uppercase tracking-wider block">
+                        {cat.tag || cat.ageRange}
+                      </span>
 
-                    {/* Sub-filtros rápidos por gênero */}
-                    <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-[#BB7F5D]">
-                      <span>Filtrar:</span>
+                      {/* Título da Categoria */}
+                      <h3 className="font-heading font-extrabold text-xl sm:text-2xl text-[#3D2518] mt-1 group-hover:text-[#FF751F] transition-colors">
+                        Moda {cat.name}
+                      </h3>
+
+                      {/* Descrição Curta */}
+                      <p className="text-xs sm:text-sm text-[#5A3825] leading-relaxed mt-2 line-clamp-2">
+                        {cat.description || 'Peças confortáveis e cheias de estilo para esta faixa de idade.'}
+                      </p>
+
+                      {/* Subcategorias Chips */}
+                      {cat.subcategories && cat.subcategories.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-3 pt-2 border-t border-[#BB7F5D]/10">
+                          {cat.subcategories.slice(0, 4).map((sub) => (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectCategory(cat.ageGroup, 'todas', sub);
+                              }}
+                              className="bg-orange-50 hover:bg-[#FF751F] text-[#5A3825] hover:text-white px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer border border-[#BB7F5D]/15"
+                            >
+                              {sub}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      {/* Botão 'Ver produtos' */}
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectCategory(cat.ageGroup, 'menina');
-                        }}
-                        className="hover:text-[#FF751F] hover:underline cursor-pointer"
+                        onClick={() => handleSelectCategory(cat.ageGroup, cat.gender)}
+                        className="w-full bg-[#FF751F] hover:bg-[#e06316] text-white py-3 px-4 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-orange-500/15 flex items-center justify-center gap-2 transition-all cursor-pointer group-hover:bg-[#e06316]"
                       >
-                        Menina
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Ver produtos</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform ml-1" />
                       </button>
-                      <span>•</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectCategory(cat.ageGroup, 'menino');
-                        }}
-                        className="hover:text-[#FF751F] hover:underline cursor-pointer"
-                      >
-                        Menino
-                      </button>
-                      <span>•</span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectCategory(cat.ageGroup, 'todas');
-                        }}
-                        className="hover:text-[#FF751F] hover:underline cursor-pointer"
-                      >
-                        Todos
-                      </button>
+
+                      {/* Sub-filtros rápidos por gênero */}
+                      <div className="flex items-center justify-center gap-2 text-[11px] font-semibold text-[#BB7F5D]">
+                        <span>Filtrar:</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectCategory(cat.ageGroup, 'menina');
+                          }}
+                          className="hover:text-[#FF751F] hover:underline cursor-pointer"
+                        >
+                          Menina
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectCategory(cat.ageGroup, 'menino');
+                          }}
+                          className="hover:text-[#FF751F] hover:underline cursor-pointer"
+                        >
+                          Menino
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectCategory(cat.ageGroup, 'todas');
+                          }}
+                          className="hover:text-[#FF751F] hover:underline cursor-pointer"
+                        >
+                          Todos
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Additional category cards (e.g. Acessórios & Ver Catálogo Completo) */}
         {otherCategories.length > 0 && (

@@ -389,22 +389,35 @@ export const ProductCatalog: React.FC = () => {
 
         {/* PRODUCTS GRID */}
         {sortedProducts.length === 0 ? (
-          <div className="text-center py-16 bg-white rounded-3xl border border-[#BB7F5D]/20 p-8 shadow-xs">
-            <div className="w-16 h-16 bg-orange-100 text-[#FF751F] rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="text-center py-16 bg-white rounded-3xl border border-[#BB7F5D]/20 p-8 shadow-xs max-w-lg mx-auto">
+            <div className="w-16 h-16 bg-orange-50 text-[#FF751F] rounded-full flex items-center justify-center mx-auto mb-4">
               <Sparkles className="w-8 h-8" />
             </div>
-            <h3 className="font-heading font-bold text-lg text-[#3D2518]">
-              Nenhuma peça encontrada com os filtros selecionados
-            </h3>
-            <p className="text-xs sm:text-sm text-[#5A3825] mt-1 max-w-md mx-auto">
-              Tente selecionar outro tamanho, gênero ou coleção, ou clique abaixo para ver todas as peças do estoque.
-            </p>
-            <button
-              onClick={resetFilters}
-              className="mt-5 bg-[#FF751F] hover:bg-[#e06316] text-white px-6 py-2.5 rounded-full font-bold text-xs shadow-sm transition-all cursor-pointer"
-            >
-              Ver Todas as Peças do Estoque
-            </button>
+            {products.length === 0 ? (
+              <>
+                <h3 className="font-heading font-bold text-lg text-[#3D2518]">
+                  Catálogo em Atualização
+                </h3>
+                <p className="text-xs sm:text-sm text-[#5A3825] mt-1 max-w-md mx-auto leading-relaxed">
+                  Nenhum produto cadastrado no momento. Cadastre novas peças no Painel Administrativo ou aguarde as novidades da coleção!
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="font-heading font-bold text-lg text-[#3D2518]">
+                  Nenhuma peça encontrada com os filtros selecionados
+                </h3>
+                <p className="text-xs sm:text-sm text-[#5A3825] mt-1 max-w-md mx-auto">
+                  Tente selecionar outro tamanho, gênero ou coleção, ou clique abaixo para ver todas as peças do estoque.
+                </p>
+                <button
+                  onClick={resetFilters}
+                  className="mt-5 bg-[#FF751F] hover:bg-[#e06316] text-white px-6 py-2.5 rounded-full font-bold text-xs shadow-sm transition-all cursor-pointer"
+                >
+                  Ver Todas as Peças do Estoque
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
