@@ -96,6 +96,12 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
   const [bulkColorText, setBulkColorText] = useState('');
   const [showBulkColorInput, setShowBulkColorInput] = useState(false);
 
+  // Subcategory & Season Free-Text / Dynamic Creation State
+  const [isCustomSubcat, setIsCustomSubcat] = useState<boolean>(false);
+  const [customSubcatText, setCustomSubcatText] = useState<string>('');
+  const [isCustomSeason, setIsCustomSeason] = useState<boolean>(false);
+  const [customSeasonText, setCustomSeasonText] = useState<string>('');
+
   // Photo Upload States
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
   const [showUrlInputSlot, setShowUrlInputSlot] = useState<number | null>(null);
@@ -154,19 +160,63 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
 
   const availableSizesList: ProductSize[] = ORDERED_SIZES;
 
-  // Get current subcategories available for the selected category
-  const currentCategoryInfo = categories.find((c) => c.ageGroup === formData.category || c.id === formData.category);
-  const availableSubcategories = currentCategoryInfo?.subcategories || [
+  // Active Category information based on current formData.category
+  const activeCategoryInfo = categories.find(
+    (c) => c.ageGroup === formData.category || c.id === formData.category || c.slug === formData.category
+  );
+
+  // 1. Subcategories defined specifically in the active category
+  const activeCategorySubcategories = Array.isArray(activeCategoryInfo?.subcategories)
+    ? activeCategoryInfo.subcategories.map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  // 2. Subcategories defined across other categories in the store
+  const otherStoreSubcategories = Array.from(
+    new Set(
+      categories
+        .filter((c) => c.id !== activeCategoryInfo?.id && c.ageGroup !== formData.category)
+        .flatMap((c) => c.subcategories || [])
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  ).filter((s) => !activeCategorySubcategories.includes(s));
+
+  // 3. Subcategories currently used in products
+  const otherProductsSubcategories = Array.from(
+    new Set(
+      products
+        .map((p) => p.subCategoryName?.trim())
+        .filter(Boolean) as string[]
+    )
+  ).filter(
+    (s) => !activeCategorySubcategories.includes(s) && !otherStoreSubcategories.includes(s)
+  );
+
+  // 4. Default baseline fallback if nothing exists yet
+  const defaultFallbackSubcategories = [
     'Conjuntos',
     'Vestidos',
     'Macacões',
     'Jardineiras & Rompers',
     'Camisetas & Blusas',
     'Calças & Bermudas',
+    'Shorts & Saias',
     'Bodies',
     'Pijamas',
+    'Moda Praia',
+    'Casacos & Jaquetas',
     'Acessórios',
   ];
+
+  // All known dynamic subcategories combined
+  const allDynamicSubcategories = Array.from(
+    new Set([
+      ...activeCategorySubcategories,
+      ...otherStoreSubcategories,
+      ...otherProductsSubcategories,
+      ...(activeCategorySubcategories.length === 0 ? defaultFallbackSubcategories : []),
+    ])
+  );
 
   const SEASON_SUGGESTIONS = [
     'Primavera / Verão',
@@ -179,7 +229,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
 
   const handleOpenNew = () => {
     setEditingProduct(null);
-    const catInfo = categories.find((c) => c.ageGroup === 'infantil');
+    const catInfo = categories.find((c) => c.ageGroup === 'infantil' || c.id === 'cat-infantil');
     const firstSubcat = catInfo?.subcategories?.[0] || 'Conjuntos';
     setFormData({
       name: '',
@@ -211,17 +261,24 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
     setColorInputText('');
     setBulkColorText('');
     setShowBulkColorInput(false);
+    setIsCustomSubcat(false);
+    setCustomSubcatText('');
+    setIsCustomSeason(false);
+    setCustomSeasonText('');
     setIsModalOpen(true);
   };
 
   const handleEdit = (prod: Product) => {
     setEditingProduct(prod);
+    const prodSubcat = prod.subCategoryName?.trim() || '';
+    const isSeasonCustom = Boolean(prod.season && !SEASON_SUGGESTIONS.includes(prod.season));
+
     setFormData({
       name: prod.name,
       sku: prod.sku,
       category: prod.category,
       subcategory: prod.subcategory,
-      subCategoryName: prod.subCategoryName || '',
+      subCategoryName: prodSubcat,
       categoryLabel: prod.categoryLabel,
       price: prod.price,
       originalPrice: prod.originalPrice,
@@ -236,9 +293,22 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
       sizes: sortSizesByOrder(prod.sizes ? [...prod.sizes] : []),
       colors: prod.colors ? [...prod.colors] : [],
     });
+
     setColorInputText('');
     setBulkColorText('');
     setShowBulkColorInput(false);
+
+    // If product has a subcategory not present in known list, activate custom mode
+    if (prodSubcat && !allDynamicSubcategories.includes(prodSubcat)) {
+      setIsCustomSubcat(true);
+      setCustomSubcatText(prodSubcat);
+    } else {
+      setIsCustomSubcat(false);
+      setCustomSubcatText('');
+    }
+
+    setIsCustomSeason(isSeasonCustom);
+    setCustomSeasonText(isSeasonCustom ? prod.season || '' : '');
     setIsModalOpen(true);
   };
 
@@ -365,16 +435,26 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
       sub = 'unissex';
     }
 
-    const catInfo = categories.find((c) => c.ageGroup === cat || c.id === cat);
-    const firstSubcat = catInfo?.subcategories?.[0] || 'Geral';
+    const catInfo = categories.find((c) => c.ageGroup === cat || c.id === cat || c.slug === cat);
+    const catSubcats = Array.isArray(catInfo?.subcategories) ? catInfo.subcategories : [];
+    const firstSubcat = catSubcats[0] || 'Conjuntos';
 
-    setFormData({
-      ...formData,
-      category: cat,
-      subcategory: sub,
-      categoryLabel: label,
-      subCategoryName: firstSubcat,
-    });
+    if (!isCustomSubcat) {
+      setFormData({
+        ...formData,
+        category: cat,
+        subcategory: sub,
+        categoryLabel: label,
+        subCategoryName: firstSubcat,
+      });
+    } else {
+      setFormData({
+        ...formData,
+        category: cat,
+        subcategory: sub,
+        categoryLabel: label,
+      });
+    }
   };
 
   // Photo upload and automatic browser compression (prevents memory crash and white screen)
@@ -468,13 +548,28 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
       return;
     }
 
-    const finalSubcategoryName = formData.subCategoryName?.trim() || 'Geral';
-    const finalSeason = formData.season?.trim() || 'Primavera / Verão';
+    const finalSubcategoryName = (
+      isCustomSubcat ? customSubcatText.trim() : formData.subCategoryName?.trim()
+    ) || 'Geral';
+
+    const finalSeason = (
+      isCustomSeason ? customSeasonText.trim() : formData.season?.trim()
+    ) || 'Primavera / Verão';
+
     const finalSizeRecommendation = formData.sizeRecommendation?.trim() || undefined;
 
-    // Auto-save subcategory to category definition if not already present
-    if (currentCategoryInfo && finalSubcategoryName && !currentCategoryInfo.subcategories?.includes(finalSubcategoryName)) {
-      addSubcategoryToCategory(currentCategoryInfo.id, finalSubcategoryName);
+    // Auto-save subcategory to category definition if not already present in StoreContext / LocalStorage
+    const targetCat = categories.find(
+      (c) => c.ageGroup === formData.category || c.id === formData.category || c.slug === formData.category
+    );
+
+    if (
+      targetCat &&
+      finalSubcategoryName &&
+      finalSubcategoryName !== 'Geral' &&
+      !targetCat.subcategories?.includes(finalSubcategoryName)
+    ) {
+      addSubcategoryToCategory(targetCat.id, finalSubcategoryName);
     }
 
     if (editingProduct) {
@@ -905,7 +1000,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#5A3825] mb-1">
-                    Grupo de Idade *
+                    Grupo de Idade / Categoria *
                   </label>
                   <select
                     value={formData.category}
@@ -916,6 +1011,13 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
                     <option value="infantil">Infantil (01 ao 10 anos)</option>
                     <option value="juvenil">Juvenil (12 ao 18 anos)</option>
                     <option value="acessorios">Acessórios</option>
+                    {categories
+                      .filter((c) => !['bebe', 'infantil', 'juvenil', 'acessorios'].includes(c.ageGroup) && !['bebe', 'infantil', 'juvenil', 'acessorios'].includes(c.id))
+                      .map((c) => (
+                        <option key={c.id} value={c.ageGroup || c.id}>
+                          {c.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -944,11 +1046,25 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#5A3825] mb-1 flex items-center gap-1">
-                    <SunMedium className="w-3.5 h-3.5 text-[#FF751F]" />
-                    <span>Estação / Coleção</span>
-                  </label>
-                  <div className="space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-[#5A3825] flex items-center gap-1">
+                      <SunMedium className="w-3.5 h-3.5 text-[#FF751F]" />
+                      <span>Estação / Coleção</span>
+                    </label>
+                    {isCustomSeason && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomSeason(false);
+                          setFormData({ ...formData, season: SEASON_SUGGESTIONS[0] });
+                        }}
+                        className="text-[10px] text-[#5A3825] hover:text-[#FF751F] font-bold"
+                      >
+                        ← Lista
+                      </button>
+                    )}
+                  </div>
+                  {!isCustomSeason ? (
                     <select
                       value={
                         SEASON_SUGGESTIONS.includes(formData.season || '')
@@ -956,7 +1072,11 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
                           : '__custom__'
                       }
                       onChange={(e) => {
-                        if (e.target.value !== '__custom__') {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomSeason(true);
+                          setCustomSeasonText('');
+                          setFormData({ ...formData, season: '' });
+                        } else {
                           setFormData({ ...formData, season: e.target.value });
                         }
                       }}
@@ -967,63 +1087,189 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
                           {sn}
                         </option>
                       ))}
-                      <option value="__custom__">+ Outra / Personalizada</option>
+                      <option value="__custom__" className="text-[#FF751F] font-bold">
+                        + Outra / Personalizada...
+                      </option>
                     </select>
-
-                    {(!SEASON_SUGGESTIONS.includes(formData.season || '') ||
-                      formData.season === '') && (
-                      <input
-                        type="text"
-                        value={formData.season || ''}
-                        onChange={(e) =>
-                          setFormData({ ...formData, season: e.target.value })
-                        }
-                        placeholder="Ex: Primavera / Verão"
-                        className="w-full px-2.5 py-1.5 text-xs bg-orange-50/40 border border-[#FF751F]/40 text-[#3D2518] rounded-lg focus:outline-none focus:border-[#FF751F]"
-                      />
-                    )}
-                  </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={customSeasonText}
+                      onChange={(e) => {
+                        setCustomSeasonText(e.target.value);
+                        setFormData({ ...formData, season: e.target.value });
+                      }}
+                      placeholder="Ex: Coleção Festas / Alto Verão"
+                      className="w-full px-2.5 py-1.5 text-xs bg-orange-50/40 border border-[#FF751F]/40 text-[#3D2518] rounded-lg focus:outline-none focus:border-[#FF751F]"
+                      autoFocus
+                    />
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#5A3825] mb-1">
-                    Subcategoria / Tipo *
-                  </label>
-                  <div className="space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-[#5A3825]">
+                      Subcategoria / Tipo *
+                    </label>
+                    {!isCustomSubcat ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomSubcat(true);
+                          setCustomSubcatText('');
+                        }}
+                        className="text-[11px] text-[#FF751F] hover:text-[#e06316] font-bold flex items-center gap-0.5 cursor-pointer"
+                        title="Cadastrar uma nova subcategoria"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>+ Nova</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomSubcat(false);
+                          const fallback =
+                            activeCategorySubcategories[0] ||
+                            allDynamicSubcategories[0] ||
+                            'Conjuntos';
+                          setFormData({ ...formData, subCategoryName: fallback });
+                        }}
+                        className="text-[11px] text-[#5A3825] hover:text-[#FF751F] font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <span>← Lista</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {!isCustomSubcat ? (
                     <select
                       value={
-                        availableSubcategories.includes(formData.subCategoryName)
+                        allDynamicSubcategories.includes(formData.subCategoryName)
                           ? formData.subCategoryName
-                          : '__custom__'
+                          : formData.subCategoryName || ''
                       }
                       onChange={(e) => {
-                        if (e.target.value !== '__custom__') {
+                        if (e.target.value === '__custom__') {
+                          setIsCustomSubcat(true);
+                          setCustomSubcatText('');
+                        } else {
                           setFormData({ ...formData, subCategoryName: e.target.value });
                         }
                       }}
                       className="w-full px-3 py-2 text-xs bg-white border border-[#BB7F5D]/30 text-[#3D2518] rounded-xl focus:border-[#FF751F] focus:outline-none"
                     >
-                      {availableSubcategories.map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
-                        </option>
-                      ))}
-                      <option value="__custom__">+ Outra / Nova Subcategoria</option>
-                    </select>
+                      {activeCategorySubcategories.length > 0 && (
+                        <optgroup
+                          label={`Subcategorias de ${
+                            activeCategoryInfo?.name || 'Esta Categoria'
+                          }`}
+                        >
+                          {activeCategorySubcategories.map((sub) => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
 
-                    {(!availableSubcategories.includes(formData.subCategoryName) ||
-                      formData.subCategoryName === '') && (
-                      <input
-                        type="text"
-                        value={formData.subCategoryName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, subCategoryName: e.target.value })
-                        }
-                        placeholder="Digite o tipo de peça..."
-                        className="w-full px-2.5 py-1.5 text-xs bg-orange-50/40 border border-[#FF751F]/40 text-[#3D2518] rounded-lg focus:outline-none focus:border-[#FF751F]"
-                      />
-                    )}
-                  </div>
+                      {otherStoreSubcategories.length > 0 && (
+                        <optgroup label="Outras Subcategorias Cadastradas">
+                          {otherStoreSubcategories.map((sub) => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+
+                      {otherProductsSubcategories.length > 0 && (
+                        <optgroup label="Subcategorias em Outros Produtos">
+                          {otherProductsSubcategories.map((sub) => (
+                            <option key={sub} value={sub}>
+                              {sub}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+
+                      {activeCategorySubcategories.length === 0 &&
+                        otherStoreSubcategories.length === 0 &&
+                        defaultFallbackSubcategories.map((sub) => (
+                          <option key={sub} value={sub}>
+                            {sub}
+                          </option>
+                        ))}
+
+                      <option value="__custom__" className="text-[#FF751F] font-bold">
+                        + Outra / Nova Subcategoria...
+                      </option>
+                    </select>
+                  ) : (
+                    <div className="space-y-1.5 p-2 bg-orange-50/70 rounded-xl border border-[#FF751F]/40 animate-in fade-in">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={customSubcatText}
+                          onChange={(e) => {
+                            setCustomSubcatText(e.target.value);
+                            setFormData({ ...formData, subCategoryName: e.target.value });
+                          }}
+                          placeholder="Ex: Salopete, Macacão Plush..."
+                          className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-[#FF751F]/50 text-[#3D2518] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#FF751F]"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const trimmed = customSubcatText.trim();
+                              if (trimmed) {
+                                const targetCat = categories.find(
+                                  (c) =>
+                                    c.ageGroup === formData.category ||
+                                    c.id === formData.category ||
+                                    c.slug === formData.category
+                                );
+                                if (targetCat) {
+                                  addSubcategoryToCategory(targetCat.id, trimmed);
+                                }
+                                setIsCustomSubcat(false);
+                                setFormData({ ...formData, subCategoryName: trimmed });
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const trimmed = customSubcatText.trim();
+                            if (trimmed) {
+                              const targetCat = categories.find(
+                                (c) =>
+                                  c.ageGroup === formData.category ||
+                                  c.id === formData.category ||
+                                  c.slug === formData.category
+                              );
+                              if (targetCat) {
+                                addSubcategoryToCategory(targetCat.id, trimmed);
+                              }
+                              setIsCustomSubcat(false);
+                              setFormData({ ...formData, subCategoryName: trimmed });
+                            } else {
+                              showToast('Digite o nome da subcategoria.', 'info');
+                            }
+                          }}
+                          className="bg-[#FF751F] hover:bg-[#e06316] text-white px-2 py-1.5 rounded-lg text-[11px] font-bold shrink-0 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Salvar e vincular a esta categoria"
+                        >
+                          <Check className="w-3 h-3" />
+                          <span>Salvar</span>
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-[#BB7F5D] block leading-tight">
+                        Salva e vincula à categoria na hora.
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
