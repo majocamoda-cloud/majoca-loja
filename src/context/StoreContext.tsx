@@ -166,13 +166,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (isMounted) {
           if (Array.isArray(savedCategories) && savedCategories.length > 0) {
-            setCategories((current) => (current.length === 0 ? savedCategories : current));
+            setCategories(savedCategories);
           }
-          if (savedSettings && typeof savedSettings === 'object' && savedSettings.heroImage) {
-            setSettings((current) => (!current.heroImage ? { ...current, ...savedSettings } : current));
+          if (savedSettings && typeof savedSettings === 'object' && Object.keys(savedSettings).length > 0) {
+            setSettings((current) => ({ ...current, ...savedSettings }));
           }
           if (Array.isArray(savedProducts) && savedProducts.length > 0) {
-            setProducts((current) => (current.length === 0 ? savedProducts : current));
+            setProducts(savedProducts);
           }
         }
       } catch (e) {
