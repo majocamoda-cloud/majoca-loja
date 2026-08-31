@@ -371,7 +371,7 @@ export const AdminBackupRestore: React.FC = () => {
             </div>
 
             <h3 className="font-heading font-extrabold text-lg text-[#3D2518] mb-1">
-              Exportar Arquivo de Backup
+              Exportar Backup (.JSON)
             </h3>
             <p className="text-xs text-[#5A3825] leading-relaxed mb-6">
               Gera um arquivo completo com todos os registros atuais da sua loja prontos para arquivamento ou migração.
@@ -458,7 +458,7 @@ export const AdminBackupRestore: React.FC = () => {
             </div>
 
             <h3 className="font-heading font-extrabold text-lg text-[#3D2518] mb-1">
-              Restaurar Backup do Sistema
+              Importar / Restaurar Backup (.JSON)
             </h3>
             <p className="text-xs text-[#5A3825] leading-relaxed mb-4">
               Selecione ou arraste um arquivo JSON de backup previamente exportado para recuperar todos os produtos e configurações.
@@ -548,7 +548,7 @@ export const AdminBackupRestore: React.FC = () => {
             ) : (
               <>
                 <Upload className="w-5 h-5" />
-                <span>Restaurar & Gravar no Supabase</span>
+                <span>Importar / Restaurar Backup (.JSON)</span>
               </>
             )}
           </button>
