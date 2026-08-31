@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initialCategories, initialOrders, initialProducts, initialSettings } from '../data/initialData';
 import { supabase, safeSupabaseOperation } from '../lib/supabase';
+import { saveDualStorage, getLocalStorageItem, idbGet } from '../utils/persistentStorage';
 import {
   AgeGroup,
   CartItem,
@@ -115,24 +116,74 @@ const LOCAL_STORAGE_KEYS = {
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>(() => {
+    return getLocalStorageItem(LOCAL_STORAGE_KEYS.PRODUCTS, initialProducts || []);
+  });
+
+  const [categories, setCategories] = useState<CategoryInfo[]>(() => {
+    return getLocalStorageItem(LOCAL_STORAGE_KEYS.CATEGORIES, initialCategories || []);
+  });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    return getLocalStorageItem(LOCAL_STORAGE_KEYS.ORDERS, initialOrders || []);
+  });
+
+  const [settings, setSettings] = useState<StoreSettings>(() => {
+    return getLocalStorageItem(LOCAL_STORAGE_KEYS.SETTINGS, initialSettings);
+  });
+
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    return getLocalStorageItem(LOCAL_STORAGE_KEYS.CART, []);
+  });
+
+  const [lgpdAccepted, setLgpdAccepted] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.PRODUCTS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return initialProducts || [];
+      return localStorage.getItem(LOCAL_STORAGE_KEYS.LGPD) === 'true';
     } catch {
-      return initialProducts || [];
+      return false;
     }
   });
 
-  // Busca inicial dos produtos no Supabase com fallback transparente para LocalStorage
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LOCAL_STORAGE_KEYS.ADMIN_AUTH) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Background hydration from IndexedDB and Supabase
   useEffect(() => {
     let isMounted = true;
-    const fetchProductsFromSupabase = async () => {
+
+    // 1. Check IndexedDB in case LocalStorage was cleared or had quota overflow
+    const hydrateFromIndexedDB = async () => {
       try {
-        const { data, fromFallback } = await safeSupabaseOperation(
+        const [savedCategories, savedSettings, savedProducts] = await Promise.all([
+          idbGet<CategoryInfo[]>(LOCAL_STORAGE_KEYS.CATEGORIES),
+          idbGet<StoreSettings>(LOCAL_STORAGE_KEYS.SETTINGS),
+          idbGet<Product[]>(LOCAL_STORAGE_KEYS.PRODUCTS),
+        ]);
+
+        if (isMounted) {
+          if (Array.isArray(savedCategories) && savedCategories.length > 0) {
+            setCategories((current) => (current.length === 0 ? savedCategories : current));
+          }
+          if (savedSettings && typeof savedSettings === 'object' && savedSettings.heroImage) {
+            setSettings((current) => (!current.heroImage ? { ...current, ...savedSettings } : current));
+          }
+          if (Array.isArray(savedProducts) && savedProducts.length > 0) {
+            setProducts((current) => (current.length === 0 ? savedProducts : current));
+          }
+        }
+      } catch (e) {
+        console.warn('Hydration from IndexedDB skipped:', e);
+      }
+    };
+
+    // 2. Fetch from Supabase
+    const fetchFromSupabase = async () => {
+      try {
+        const { data: prodData, fromFallback } = await safeSupabaseOperation(
           async () => {
             const res = await supabase.from('produtos').select('*');
             if (res.error) throw res.error;
@@ -142,8 +193,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           3500
         );
 
-        if (!fromFallback && data && Array.isArray(data) && data.length > 0 && isMounted) {
-          const sanitized: Product[] = data.map((item: any) => ({
+        if (!fromFallback && prodData && Array.isArray(prodData) && prodData.length > 0 && isMounted) {
+          const sanitized: Product[] = prodData.map((item: any) => ({
             id: String(item.id || item.sku || `prod-${Date.now()}`),
             name: String(item.name || item.nome || 'Produto Majoca'),
             category: item.category || item.categoria || 'infantil',
@@ -169,76 +220,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             sku: String(item.sku || `MJC-${Math.floor(100 + Math.random() * 900)}`),
           }));
           setProducts(sanitized);
+          saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, sanitized);
         }
       } catch (e) {
         console.warn("Modo local ativo: operando com dados armazenados no navegador.", e);
       }
     };
-    fetchProductsFromSupabase();
+
+    hydrateFromIndexedDB();
+    fetchFromSupabase();
+
     return () => {
       isMounted = false;
     };
   }, []);
-
-  const [categories, setCategories] = useState<CategoryInfo[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.CATEGORIES);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-      return initialCategories || [];
-    } catch {
-      return initialCategories || [];
-    }
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.ORDERS);
-      return saved ? JSON.parse(saved) : (initialOrders || []);
-    } catch {
-      return initialOrders || [];
-    }
-  });
-
-  const [settings, setSettings] = useState<StoreSettings>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
-      return saved ? JSON.parse(saved) : (initialSettings || {});
-    } catch {
-      return initialSettings || {};
-    }
-  });
-
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.CART);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [lgpdAccepted, setLgpdAccepted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(LOCAL_STORAGE_KEYS.LGPD) === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(LOCAL_STORAGE_KEYS.ADMIN_AUTH) === 'true';
-    } catch {
-      return false;
-    }
-  });
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -269,23 +264,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(products)); } catch {}
+    saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, products);
   }, [products]);
 
   useEffect(() => {
-    try { localStorage.setItem(LOCAL_STORAGE_KEYS.CATEGORIES, JSON.stringify(categories)); } catch {}
+    saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, categories);
   }, [categories]);
 
   useEffect(() => {
-    try { localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(orders)); } catch {}
+    saveDualStorage(LOCAL_STORAGE_KEYS.ORDERS, orders);
   }, [orders]);
 
   useEffect(() => {
-    try { localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); } catch {}
+    saveDualStorage(LOCAL_STORAGE_KEYS.SETTINGS, settings);
   }, [settings]);
 
   useEffect(() => {
-    try { localStorage.setItem(LOCAL_STORAGE_KEYS.CART, JSON.stringify(cart)); } catch {}
+    saveDualStorage(LOCAL_STORAGE_KEYS.CART, cart);
   }, [cart]);
 
   useEffect(() => {
@@ -493,50 +488,104 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ).catch(() => {});
   };
 
-  const updateCategory = (updatedCat: CategoryInfo) => setCategories((prev) => prev.map((c) => (c.id === updatedCat.id ? updatedCat : c)));
-  const addCategory = (newCat: CategoryInfo) => setCategories((prev) => [...prev, newCat]);
-  const deleteCategory = (catId: string) => setCategories((prev) => prev.filter((c) => c.id !== catId));
+  const updateCategory = (updatedCat: CategoryInfo) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => (c.id === updatedCat.id ? updatedCat : c));
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
+    // Tentativa de sincronização em segundo plano
+    safeSupabaseOperation(
+      async () => await supabase.from('categorias').upsert([updatedCat]),
+      null,
+      3000
+    ).catch(() => {});
+  };
+
+  const addCategory = (newCat: CategoryInfo) => {
+    setCategories((prev) => {
+      const next = [...prev, newCat];
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
+    safeSupabaseOperation(
+      async () => await supabase.from('categorias').insert([newCat]),
+      null,
+      3000
+    ).catch(() => {});
+  };
+
+  const deleteCategory = (catId: string) => {
+    setCategories((prev) => {
+      const next = prev.filter((c) => c.id !== catId);
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
+    safeSupabaseOperation(
+      async () => await supabase.from('categorias').delete().eq('id', catId),
+      null,
+      3000
+    ).catch(() => {});
+  };
 
   const addSubcategoryToCategory = (categoryId: string, subcategoryName: string) => {
     const trimmed = subcategoryName.trim();
     if (!trimmed) return;
-    setCategories((prev) =>
-      prev.map((c) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
         if (c.id === categoryId) {
           const current = c.subcategories || [];
           if (current.includes(trimmed)) return c;
           return { ...c, subcategories: [...current, trimmed] };
         }
         return c;
-      })
-    );
+      });
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
   };
 
   const removeSubcategoryFromCategory = (categoryId: string, subcategoryName: string) => {
-    setCategories((prev) =>
-      prev.map((c) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
         if (c.id === categoryId) {
           return { ...c, subcategories: (c.subcategories || []).filter((s) => s !== subcategoryName) };
         }
         return c;
-      })
-    );
+      });
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
   };
 
   const updateSubcategoryInCategory = (categoryId: string, oldName: string, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    setCategories((prev) =>
-      prev.map((c) => {
+    setCategories((prev) => {
+      const next = prev.map((c) => {
         if (c.id === categoryId) {
           return { ...c, subcategories: (c.subcategories || []).map((s) => (s === oldName ? trimmed : s)) };
         }
         return c;
-      })
-    );
+      });
+      saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      return next;
+    });
   };
 
-  const updateSettings = (newSettings: Partial<StoreSettings>) => setSettings((prev) => ({ ...prev, ...newSettings }));
+  const updateSettings = (newSettings: Partial<StoreSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...newSettings };
+      saveDualStorage(LOCAL_STORAGE_KEYS.SETTINGS, next);
+      return next;
+    });
+    safeSupabaseOperation(
+      async () => await supabase.from('configuracoes').upsert({ id: 'main', ...newSettings }),
+      null,
+      3000
+    ).catch(() => {});
+  };
+
   const acceptLgpd = () => setLgpdAccepted(true);
 
   // RESTAURAÇÃO COMPLETA DE BACKUP
@@ -581,12 +630,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         setProducts(sanitizedProducts);
         restoredProdCount = sanitizedProducts.length;
-
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(sanitizedProducts));
-        } catch (e) {
-          console.warn('Erro ao salvar produtos no LocalStorage:', e);
-        }
+        saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, sanitizedProducts);
 
         // Sincroniza em lote com o Supabase em segundo plano de forma segura
         safeSupabaseOperation(
@@ -604,26 +648,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (Array.isArray(backup.categories) && backup.categories.length > 0) {
         setCategories(backup.categories);
         restoredCatCount = backup.categories.length;
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEYS.CATEGORIES, JSON.stringify(backup.categories));
-        } catch {}
+        saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, backup.categories);
       }
 
       // 3. Restaurar Pedidos se fornecido
       if (Array.isArray(backup.orders)) {
         setOrders(backup.orders);
         restoredOrderCount = backup.orders.length;
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEYS.ORDERS, JSON.stringify(backup.orders));
-        } catch {}
+        saveDualStorage(LOCAL_STORAGE_KEYS.ORDERS, backup.orders);
       }
 
       // 4. Restaurar Configurações se fornecido
       if (backup.settings && typeof backup.settings === 'object') {
-        setSettings((prev) => ({ ...prev, ...backup.settings }));
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEYS.SETTINGS, JSON.stringify({ ...settings, ...backup.settings }));
-        } catch {}
+        const mergedSettings = { ...settings, ...backup.settings };
+        setSettings(mergedSettings);
+        saveDualStorage(LOCAL_STORAGE_KEYS.SETTINGS, mergedSettings);
       }
 
       return {

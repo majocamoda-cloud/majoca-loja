@@ -1,34 +1,48 @@
-import React, { useRef, useState } from 'react';
-import { Save, Layout, Upload, Image as ImageIcon, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Save, Layout, Upload, Image as ImageIcon, Sparkles, Loader2, CheckCircle } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { StoreSettings } from '../../types';
+import { processImageFile } from '../../utils/imageOptimizer';
 
 export const AdminBannersContent: React.FC = () => {
   const { settings, updateSettings, showToast } = useStore();
   const [formSettings, setFormSettings] = useState<StoreSettings>(settings);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    setFormSettings(settings);
+  }, [settings]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings(formSettings);
-    showToast('Banners e textos do site atualizados com sucesso!', 'success');
+    setIsSaving(true);
+    try {
+      updateSettings(formSettings);
+      showToast('Banners e textos do site salvos permanentemente!', 'success');
+    } catch (err: any) {
+      showToast('Aviso ao salvar configurações: ' + (err?.message || 'Tente novamente'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToast('A imagem deve ter no máximo 5MB.', 'error');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormSettings({ ...formSettings, heroImage: reader.result });
-          showToast('Imagem carregada! Clique em "Salvar Alterações" para aplicar.', 'info');
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    try {
+      setIsProcessingImage(true);
+      // Processa e comprime a imagem para alta definição (1600x900, ~80-120KB)
+      const compressedDataUrl = await processImageFile(file, 1600, 900, 0.82);
+      setFormSettings((prev) => ({ ...prev, heroImage: compressedDataUrl }));
+      showToast('Imagem do banner otimizada com sucesso! Clique em "Salvar Alterações" para aplicar.', 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Erro ao processar imagem.', 'error');
+    } finally {
+      setIsProcessingImage(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -159,13 +173,23 @@ export const AdminBannersContent: React.FC = () => {
                   />
                   <button
                     type="button"
+                    disabled={isProcessingImage}
                     onClick={() => fileInputRef.current?.click()}
-                    className="bg-[#FF751F] hover:bg-[#e06316] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer"
+                    className="bg-[#FF751F] hover:bg-[#e06316] text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <Upload className="w-4 h-4" />
-                    <span>Fazer Upload do Computador/Celular</span>
+                    {isProcessingImage ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Otimizando Imagem...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        <span>Fazer Upload do Computador/Celular</span>
+                      </>
+                    )}
                   </button>
-                  <span className="text-[11px] text-[#BB7F5D]">PNG, JPG ou WEBP até 5MB</span>
+                  <span className="text-[11px] text-[#BB7F5D]">Otimização automática HD para carregamento instantâneo</span>
                 </div>
 
                 <div>
@@ -192,10 +216,20 @@ export const AdminBannersContent: React.FC = () => {
       <div className="flex justify-end">
         <button
           type="submit"
-          className="bg-[#FF751F] hover:bg-[#e06316] text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-md flex items-center gap-2 transition-all cursor-pointer"
+          disabled={isSaving || isProcessingImage}
+          className="bg-[#FF751F] hover:bg-[#e06316] text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-60"
         >
-          <Save className="w-4 h-4" />
-          <span>Salvar Alterações do Banner</span>
+          {isSaving ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Salvando no Sistema...</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Salvar Alterações do Banner</span>
+            </>
+          )}
         </button>
       </div>
 

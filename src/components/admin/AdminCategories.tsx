@@ -12,10 +12,12 @@ import {
   Layers,
   Tag,
   CornerDownRight,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { AgeGroup, CategoryInfo, GenderCategory } from '../../types';
+import { processImageFile } from '../../utils/imageOptimizer';
 
 export const AdminCategories: React.FC = () => {
   const {
@@ -101,48 +103,39 @@ export const AdminCategories: React.FC = () => {
     quickUploadRef.current?.click();
   };
 
-  const handleQuickFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQuickFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && quickTargetCatId) {
-      if (file.size > 8 * 1024 * 1024) {
-        showToast('A imagem deve ter no máximo 8MB.', 'error');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          const targetCat = categories.find((c) => c.id === quickTargetCatId);
-          if (targetCat) {
-            updateCategory({
-              ...targetCat,
-              image: reader.result as string,
-            });
-            showToast(`Capa da categoria "${targetCat.name}" atualizada com sucesso!`, 'success');
-          }
+      try {
+        const compressedDataUrl = await processImageFile(file, 800, 800, 0.82);
+        const targetCat = categories.find((c) => c.id === quickTargetCatId);
+        if (targetCat) {
+          updateCategory({
+            ...targetCat,
+            image: compressedDataUrl,
+          });
+          showToast(`Capa da categoria "${targetCat.name}" salva com sucesso!`, 'success');
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err: any) {
+        showToast(err?.message || 'Erro ao otimizar imagem da categoria.', 'error');
+      }
     }
     if (e.target) e.target.value = '';
   };
 
   // Modal Image Upload
-  const handleModalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleModalFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        showToast('A imagem deve ter no máximo 8MB.', 'error');
-        return;
+      try {
+        const compressedDataUrl = await processImageFile(file, 800, 800, 0.82);
+        setFormData((prev) => ({ ...prev, image: compressedDataUrl }));
+        showToast('Nova foto de capa otimizada e pronta para salvar!', 'info');
+      } catch (err: any) {
+        showToast(err?.message || 'Erro ao otimizar imagem.', 'error');
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          setFormData((prev) => ({ ...prev, image: reader.result as string }));
-          showToast('Nova foto de capa carregada no formulário!', 'info');
-        }
-      };
-      reader.readAsDataURL(file);
     }
+    if (e.target) e.target.value = '';
   };
 
   const handleAddSubcatDirect = (catId: string) => {
