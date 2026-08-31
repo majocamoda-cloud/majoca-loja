@@ -7,7 +7,7 @@ export const initialSettings: StoreSettings = {
   heroSubtitle: 'A Majoca Moda acompanha todas as fases do RN ao 18 anos, do bebê ao estilo único da juventude.',
   heroButtonPrimaryText: 'Ver novidades',
   heroButtonSecondaryText: 'Explorar categorias',
-  heroImage: 'https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&w=1200&q=80',
+  heroImage: 'https://images.unsplash.com/photo-1503919545889-aef636e10ad4?auto=format&fit=crop&w=1200&q=80',
   whatsappNumber: '(32) 99928-2917',
   pixKey: '(32) 98702-2878',
   pixKeyType: 'Telefone Celular',
