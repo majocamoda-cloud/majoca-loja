@@ -34,6 +34,8 @@ export const AdminCategories: React.FC = () => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryInfo | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<CategoryInfo | null>(null);
+  const [subcatToDelete, setSubcatToDelete] = useState<{ catId: string; subName: string; catName: string } | null>(null);
 
   const modalFileInputRef = useRef<HTMLInputElement>(null);
   const quickUploadRef = useRef<HTMLInputElement>(null);
@@ -160,18 +162,12 @@ export const AdminCategories: React.FC = () => {
   };
 
   const handleDeleteSubcat = (catId: string, subName: string) => {
-    const affectedCount = products.filter(
-      (p) => (p.category === catId || categories.find((c) => c.id === catId)?.ageGroup === p.category) && p.subCategoryName === subName
-    ).length;
-
-    let msg = `Deseja excluir a subcategoria "${subName}"?`;
-    if (affectedCount > 0) {
-      msg = `Existem ${affectedCount} produto(s) com a subcategoria "${subName}". Deseja realmente removê-la da categoria?`;
-    }
-
-    if (window.confirm(msg)) {
-      removeSubcategoryFromCategory(catId, subName);
-    }
+    const cat = categories.find((c) => c.id === catId);
+    setSubcatToDelete({
+      catId,
+      subName,
+      catName: cat?.name || 'Categoria',
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -193,28 +189,15 @@ export const AdminCategories: React.FC = () => {
 
     if (editingCategory) {
       updateCategory(finalCategory);
-      showToast('Categoria atualizada com sucesso!', 'success');
     } else {
       addCategory(finalCategory);
-      showToast('Nova categoria criada com sucesso!', 'success');
     }
 
     setIsModalOpen(false);
   };
 
   const handleDeleteCategory = (cat: CategoryInfo) => {
-    const count = products.filter((p) => p.category === cat.id || p.category === cat.ageGroup).length;
-    if (count > 0) {
-      const confirmDelete = window.confirm(
-        `Existem ${count} produto(s) vinculados a esta faixa/categoria. Tem certeza de que deseja excluí-la?`
-      );
-      if (!confirmDelete) return;
-    } else {
-      const confirmDelete = window.confirm(`Deseja realmente excluir a categoria "${cat.name}"?`);
-      if (!confirmDelete) return;
-    }
-
-    deleteCategory(cat.id);
+    setCategoryToDelete(cat);
   };
 
   return (
@@ -456,22 +439,33 @@ export const AdminCategories: React.FC = () => {
                 <div className="p-3 bg-orange-50/50 border-t border-[#BB7F5D]/15 flex items-center justify-between gap-2 text-xs">
                   <button
                     type="button"
-                    onClick={() => triggerQuickUpload(cat.id)}
-                    className="flex-1 bg-white hover:bg-orange-100 text-[#FF751F] border border-[#FF751F]/40 py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    onClick={() => handleDeleteCategory(cat)}
+                    className="p-2 rounded-xl text-rose-600 hover:text-rose-800 hover:bg-rose-50 transition-colors cursor-pointer"
+                    title="Excluir Categoria"
                   >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>Trocar Capa</span>
+                    <Trash2 className="w-4 h-4" />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(cat)}
-                    className="bg-[#3D2518] hover:bg-[#2B1B12] text-white px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    title="Editar detalhes completos"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Editar</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-1 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => triggerQuickUpload(cat.id)}
+                      className="bg-white hover:bg-orange-100 text-[#FF751F] border border-[#FF751F]/40 py-2 px-3 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Capa</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(cat)}
+                      className="bg-[#3D2518] hover:bg-[#2B1B12] text-white px-3.5 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Editar detalhes completos"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Editar</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -836,6 +830,94 @@ export const AdminCategories: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CATEGORY DELETE CONFIRMATION MODAL */}
+      {categoryToDelete && (
+        <div className="fixed inset-0 z-70 overflow-y-auto bg-[#2B1B12]/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-md w-full p-6 sm:p-7 rounded-3xl shadow-2xl border border-[#BB7F5D]/30 animate-in zoom-in-95 space-y-4">
+            <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-heading font-extrabold text-lg text-[#3D2518]">
+                Excluir Categoria
+              </h3>
+              <p className="text-xs text-[#5A3825] mt-2 leading-relaxed">
+                Deseja realmente excluir a categoria <strong>"{categoryToDelete.name}"</strong>?
+              </p>
+              {products.filter((p) => p.category === categoryToDelete.id || p.category === categoryToDelete.ageGroup).length > 0 && (
+                <div className="mt-2.5 p-3 bg-amber-50 rounded-xl border border-amber-200 text-left">
+                  <p className="text-[11px] font-bold text-amber-900">
+                    Atenção: Existem {products.filter((p) => p.category === categoryToDelete.id || p.category === categoryToDelete.ageGroup).length} produto(s) vinculados a esta faixa.
+                  </p>
+                  <p className="text-[10px] text-amber-700 mt-0.5">
+                    Eles permanecerão no catálogo, mas não serão listados sob esta categoria excluída.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setCategoryToDelete(null)}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-[#5A3825] py-2.5 px-3 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteCategory(categoryToDelete.id);
+                  setCategoryToDelete(null);
+                }}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sim, Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBCATEGORY DELETE CONFIRMATION MODAL */}
+      {subcatToDelete && (
+        <div className="fixed inset-0 z-70 overflow-y-auto bg-[#2B1B12]/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-md w-full p-6 sm:p-7 rounded-3xl shadow-2xl border border-[#BB7F5D]/30 animate-in zoom-in-95 space-y-4">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-heading font-extrabold text-base text-[#3D2518]">
+                Remover Subcategoria
+              </h3>
+              <p className="text-xs text-[#5A3825] mt-2 leading-relaxed">
+                Deseja remover a subcategoria <strong>"{subcatToDelete.subName}"</strong> de <strong>"{subcatToDelete.catName}"</strong>?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setSubcatToDelete(null)}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-[#5A3825] py-2.5 px-3 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  removeSubcategoryFromCategory(subcatToDelete.catId, subcatToDelete.subName);
+                  setSubcatToDelete(null);
+                }}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sim, Remover</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

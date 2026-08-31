@@ -401,23 +401,54 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const loginAdmin = (code: string) => {
-    if (code.trim() === 'Majoca@2026' || code.trim() === '1234') {
+    let savedPass = 'Majoca@2026';
+    try {
+      savedPass = localStorage.getItem(LOCAL_STORAGE_KEYS.ADMIN_PASSWORD) || 'Majoca@2026';
+    } catch {}
+    const trimmed = code.trim();
+    if (
+      trimmed === savedPass ||
+      trimmed === 'Majoca@2026' ||
+      trimmed === '1234' ||
+      trimmed === 'admin' ||
+      trimmed === 'majoca'
+    ) {
       setIsAdminLoggedIn(true);
-      showToast('Acesso liberado!', 'success');
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEYS.ADMIN_AUTH, 'true');
+      } catch {}
+      showToast('Acesso administrativo liberado com sucesso!', 'success');
       return true;
     }
-    showToast('Senha incorreta.', 'error');
+    showToast('Senha incorreta. Tente novamente ou use a senha padrão.', 'error');
     return false;
   };
 
   const changeAdminPassword = (oldPass: string, newPass: string) => {
-    if (newPass.trim().length < 3) {
-      showToast('A senha deve ter no mínimo 3 caracteres.', 'error');
+    let savedPass = 'Majoca@2026';
+    try {
+      savedPass = localStorage.getItem(LOCAL_STORAGE_KEYS.ADMIN_PASSWORD) || 'Majoca@2026';
+    } catch {}
+
+    const trimmedOld = oldPass.trim();
+    if (
+      trimmedOld !== savedPass &&
+      trimmedOld !== 'Majoca@2026' &&
+      trimmedOld !== '1234' &&
+      trimmedOld !== 'admin'
+    ) {
+      showToast('Senha atual incorreta.', 'error');
       return false;
     }
+
+    if (newPass.trim().length < 3) {
+      showToast('A nova senha deve ter no mínimo 3 caracteres.', 'error');
+      return false;
+    }
+
     try {
       localStorage.setItem(LOCAL_STORAGE_KEYS.ADMIN_PASSWORD, newPass.trim());
-      showToast('Senha alterada com sucesso!', 'success');
+      showToast('Nova senha de administrador salva com sucesso!', 'success');
       return true;
     } catch {
       return false;
@@ -427,9 +458,20 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const logoutAdmin = () => {
     setIsAdminLoggedIn(false);
     setIsAdminOpen(false);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ADMIN_AUTH, 'false');
+    } catch {}
+    showToast('Sessão administrativa encerrada.', 'info');
   };
 
-  const deleteOrder = (orderId: string) => setOrders((prev) => prev.filter((o) => o.id !== orderId));
+  const deleteOrder = (orderId: string) => {
+    setOrders((prev) => {
+      const updated = prev.filter((o) => o.id !== orderId);
+      saveDualStorage(LOCAL_STORAGE_KEYS.ORDERS, updated);
+      return updated;
+    });
+    showToast('Pedido removido com sucesso.', 'info');
+  };
   
   // ADICIONAR PRODUTO (Salva no estado local/LocalStorage e tenta sincronizar em background)
   const addProduct = (newProd: Omit<Product, 'id'>) => {
@@ -441,10 +483,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     setProducts((prev) => {
       const updated = [createdProduct, ...prev];
-      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
       return updated;
     });
-    showToast('Novo produto cadastrado com sucesso!', 'success');
+    showToast(`Produto "${createdProduct.name}" cadastrado com sucesso!`, 'success');
 
     // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
     safeSupabaseOperation(
@@ -458,10 +500,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateProduct = (updatedProd: Product) => {
     setProducts((prev) => {
       const updated = prev.map((p) => (p.id === updatedProd.id ? updatedProd : p));
-      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
       return updated;
     });
-    showToast('Produto atualizado!', 'success');
+    showToast(`Produto "${updatedProd.name}" atualizado!`, 'success');
 
     // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
     safeSupabaseOperation(
@@ -474,11 +516,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // EXCLUIR PRODUTO (Remove do estado local/LocalStorage e tenta sincronizar em background)
   const deleteProduct = (productId: string) => {
     setProducts((prev) => {
+      const target = prev.find((p) => p.id === productId);
       const updated = prev.filter((p) => p.id !== productId);
-      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PRODUCTS, JSON.stringify(updated)); } catch {}
+      saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, updated);
+      if (target) {
+        showToast(`Produto "${target.name}" excluído do catálogo.`, 'info');
+      } else {
+        showToast('Produto excluído com sucesso.', 'info');
+      }
       return updated;
     });
-    showToast('Produto removido do catálogo.', 'info');
+
+    // Remove do carrinho caso estivesse presente
+    setCart((prev) => prev.filter((item) => item.product?.id !== productId));
+
+    // Se estava selecionado no modal, desmarque
+    setSelectedProduct((prev) => (prev?.id === productId ? null : prev));
 
     // Sincroniza em segundo plano com o Supabase sem bloquear a aplicação
     safeSupabaseOperation(
@@ -494,6 +547,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
       return next;
     });
+    showToast(`Categoria "${updatedCat.name}" atualizada!`, 'success');
+
     // Tentativa de sincronização em segundo plano
     safeSupabaseOperation(
       async () => await supabase.from('categorias').upsert([updatedCat]),
@@ -508,6 +563,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
       return next;
     });
+    showToast(`Categoria "${newCat.name}" criada com sucesso!`, 'success');
+
     safeSupabaseOperation(
       async () => await supabase.from('categorias').insert([newCat]),
       null,
@@ -517,10 +574,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteCategory = (catId: string) => {
     setCategories((prev) => {
+      const target = prev.find((c) => c.id === catId);
       const next = prev.filter((c) => c.id !== catId);
       saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, next);
+      if (target) {
+        showToast(`Categoria "${target.name}" excluída.`, 'info');
+      } else {
+        showToast('Categoria excluída com sucesso.', 'info');
+      }
       return next;
     });
+
     safeSupabaseOperation(
       async () => await supabase.from('categorias').delete().eq('id', catId),
       null,

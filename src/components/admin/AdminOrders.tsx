@@ -17,6 +17,7 @@ export const AdminOrders: React.FC = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todas');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<{ id: string; orderNum: string } | null>(null);
 
   const statusOptions: OrderStatus[] = [
     'Aguardando pagamento via PIX',
@@ -40,12 +41,7 @@ export const AdminOrders: React.FC = () => {
   };
 
   const handleDelete = (orderId: string, orderNum: string) => {
-    if (confirm(`Deseja realmente excluir o pedido ${orderNum}? Esta ação não pode ser desfeita.`)) {
-      deleteOrder(orderId);
-      if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(null);
-      }
-    }
+    setOrderToDelete({ id: orderId, orderNum });
   };
 
   const handleOpenWhatsAppCustomer = (ord: Order) => {
@@ -393,6 +389,51 @@ export const AdminOrders: React.FC = () => {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ORDER DELETE CONFIRMATION MODAL */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-70 overflow-y-auto bg-[#2B1B12]/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-md w-full p-6 sm:p-7 rounded-3xl shadow-2xl border border-[#BB7F5D]/30 animate-in zoom-in-95 space-y-4">
+            <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-heading font-extrabold text-lg text-[#3D2518]">
+                Excluir Pedido
+              </h3>
+              <p className="text-xs text-[#5A3825] mt-2 leading-relaxed">
+                Deseja realmente excluir o pedido <strong>"{orderToDelete.orderNum}"</strong>?
+              </p>
+              <p className="text-[11px] text-rose-600 font-semibold mt-1">
+                Esta ação não pode ser desfeita.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-[#5A3825] py-2.5 px-3 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteOrder(orderToDelete.id);
+                  if (selectedOrder && selectedOrder.id === orderToDelete.id) {
+                    setSelectedOrder(null);
+                  }
+                  setOrderToDelete(null);
+                }}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sim, Excluir</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

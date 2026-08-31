@@ -87,6 +87,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
   const [isModalOpen, setIsModalOpen] = useState(initialOpenModal);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
   const lowStockThreshold = settings?.lowStockThreshold ?? 2;
 
@@ -242,9 +243,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
   };
 
   const handleDelete = (prod: Product) => {
-    if (confirm(`Tem certeza que deseja excluir "${prod.name}" do catálogo da Majoca Moda?`)) {
-      deleteProduct(prod.id);
-    }
+    setProductToDelete(prod);
   };
 
   const handleSizeToggle = (size: ProductSize) => {
@@ -451,11 +450,11 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim()) {
-      alert('Informe o nome do produto.');
+      showToast('Informe o nome do produto.', 'error');
       return;
     }
     if (formData.sizes.length === 0) {
-      alert('Selecione pelo menos um tamanho para o produto.');
+      showToast('Selecione pelo menos um tamanho para o produto.', 'error');
       return;
     }
 
@@ -465,7 +464,7 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
       .filter(Boolean);
 
     if (cleanedImages.length === 0) {
-      alert('Por favor, faça upload ou adicione pelo menos a Foto 1 (Principal / Capa) do produto.');
+      showToast('Por favor, faça upload ou adicione pelo menos a Foto 1 (Principal / Capa) do produto.', 'error');
       return;
     }
 
@@ -1551,6 +1550,48 @@ export const AdminProducts: React.FC<AdminProductsProps> = ({ initialOpenModal =
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-70 overflow-y-auto bg-[#2B1B12]/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white max-w-md w-full p-6 sm:p-7 rounded-3xl shadow-2xl border border-[#BB7F5D]/30 animate-in zoom-in-95 space-y-4">
+            <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div className="text-center">
+              <h3 className="font-heading font-extrabold text-lg text-[#3D2518]">
+                Excluir Produto
+              </h3>
+              <p className="text-xs text-[#5A3825] mt-2 leading-relaxed">
+                Tem certeza que deseja excluir permanentemente o produto <strong>"{productToDelete.name}"</strong> (#{productToDelete.sku}) da loja?
+              </p>
+              <p className="text-[11px] text-rose-600 font-semibold mt-1.5">
+                Esta ação atualizará imediatamente o catálogo e o estoque.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setProductToDelete(null)}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-[#5A3825] py-2.5 px-3 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteProduct(productToDelete.id);
+                  setProductToDelete(null);
+                }}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white py-2.5 px-3 rounded-xl font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sim, Excluir</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
