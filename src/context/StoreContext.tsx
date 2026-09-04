@@ -1,6 +1,13 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { initialCategories, initialOrders, initialProducts, initialSettings } from '../data/initialData';
-import { supabase, safeSupabaseOperation } from '../lib/supabase';
+import { 
+  supabase, 
+  safeSupabaseOperation, 
+  checkSupabaseHealth, 
+  reconfigureSupabaseClient, 
+  SupabaseHealthResult, 
+  SUPABASE_RLS_FIX_SQL 
+} from '../lib/supabase';
 import { saveDualStorage, getLocalStorageItem, idbGet } from '../utils/persistentStorage';
 import {
   AgeGroup,
@@ -99,6 +106,12 @@ interface StoreContextType {
   acceptLgpd: () => void;
   toasts: Toast[];
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
+
+  // Supabase RLS & Cloud Status
+  supabaseHealth: SupabaseHealthResult | null;
+  checkCloudStatus: () => Promise<SupabaseHealthResult>;
+  saveCustomSupabaseConfig: (url: string, key: string) => Promise<SupabaseHealthResult>;
+  rlsFixSql: string;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -116,11 +129,15 @@ const LOCAL_STORAGE_KEYS = {
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>(() => {
-    return getLocalStorageItem(LOCAL_STORAGE_KEYS.PRODUCTS, initialProducts || []);
+    const saved = getLocalStorageItem<Product[]>(LOCAL_STORAGE_KEYS.PRODUCTS, []);
+    if (Array.isArray(saved) && saved.length > 0) return saved;
+    return initialProducts || [];
   });
 
   const [categories, setCategories] = useState<CategoryInfo[]>(() => {
-    return getLocalStorageItem(LOCAL_STORAGE_KEYS.CATEGORIES, initialCategories || []);
+    const saved = getLocalStorageItem<CategoryInfo[]>(LOCAL_STORAGE_KEYS.CATEGORIES, []);
+    if (Array.isArray(saved) && saved.length > 0) return saved;
+    return initialCategories || [];
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -151,9 +168,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // Background hydration from IndexedDB and Supabase
+  // Estado de saúde do Supabase e diagnóstico de RLS
+  const [supabaseHealth, setSupabaseHealth] = useState<SupabaseHealthResult | null>(null);
+
+  const checkCloudStatus = useCallback(async (): Promise<SupabaseHealthResult> => {
+    const result = await checkSupabaseHealth();
+    setSupabaseHealth(result);
+    return result;
+  }, []);
+
+  const saveCustomSupabaseConfig = useCallback(async (url: string, key: string): Promise<SupabaseHealthResult> => {
+    reconfigureSupabaseClient(url, key);
+    const result = await checkSupabaseHealth();
+    setSupabaseHealth(result);
+    return result;
+  }, []);
+
+  // Background hydration from IndexedDB and Supabase with automatic RLS fallback
   useEffect(() => {
     let isMounted = true;
+
+    // Diagnóstico inicial silencioso do Supabase
+    checkSupabaseHealth().then((res) => {
+      if (isMounted) setSupabaseHealth(res);
+    }).catch(() => {});
 
     // 1. Check IndexedDB in case LocalStorage was cleared or had quota overflow
     const hydrateFromIndexedDB = async () => {
@@ -167,12 +205,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (isMounted) {
           if (Array.isArray(savedCategories) && savedCategories.length > 0) {
             setCategories(savedCategories);
+          } else {
+            setCategories((curr) => (curr.length > 0 ? curr : initialCategories));
           }
           if (savedSettings && typeof savedSettings === 'object' && Object.keys(savedSettings).length > 0) {
             setSettings((current) => ({ ...current, ...savedSettings }));
           }
           if (Array.isArray(savedProducts) && savedProducts.length > 0) {
             setProducts(savedProducts);
+          } else {
+            setProducts((curr) => (curr.length > 0 ? curr : initialProducts));
           }
         }
       } catch (e) {
@@ -180,10 +222,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     };
 
-    // 2. Fetch from Supabase
+    // 2. Fetch from Supabase with resilient RLS fallback
     const fetchFromSupabase = async () => {
       try {
-        const { data: prodData, fromFallback } = await safeSupabaseOperation(
+        const { data: prodData, fromFallback, isRlsBlocked } = await safeSupabaseOperation(
           async () => {
             const res = await supabase.from('produtos').select('*');
             if (res.error) throw res.error;
@@ -221,9 +263,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }));
           setProducts(sanitized);
           saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, sanitized);
+        } else {
+          // Fallback automático transparente: se Supabase retornar erro de RLS, indisponibilidade ou zero registros
+          if (isMounted) {
+            if (isRlsBlocked) {
+              console.info('[RLS Fallback] Exibindo catálogo local/inicial publicamente para todos os visitantes sem depender de autenticação.');
+            }
+            setProducts((current) => {
+              if (Array.isArray(current) && current.length > 0) return current;
+              saveDualStorage(LOCAL_STORAGE_KEYS.PRODUCTS, initialProducts);
+              return initialProducts;
+            });
+            setCategories((current) => {
+              if (Array.isArray(current) && current.length > 0) return current;
+              saveDualStorage(LOCAL_STORAGE_KEYS.CATEGORIES, initialCategories);
+              return initialCategories;
+            });
+          }
         }
       } catch (e) {
-        console.warn("Modo local ativo: operando com dados armazenados no navegador.", e);
+        console.warn("Modo fallback automático ativo: catálogo do backup/inicial exibido com segurança.", e);
+        if (isMounted) {
+          setProducts((curr) => (curr && curr.length > 0 ? curr : initialProducts));
+          setCategories((curr) => (curr && curr.length > 0 ? curr : initialCategories));
+        }
       }
     };
 
@@ -233,7 +296,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [checkCloudStatus]);
 
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -806,6 +869,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteCategory, addSubcategoryToCategory, removeSubcategoryFromCategory,
         updateSubcategoryInCategory, deleteOrder, changeAdminPassword, restoreData, lgpdAccepted,
         acceptLgpd, toasts, showToast,
+        supabaseHealth, checkCloudStatus, saveCustomSupabaseConfig, rlsFixSql: SUPABASE_RLS_FIX_SQL,
       }}
     >
       {children}

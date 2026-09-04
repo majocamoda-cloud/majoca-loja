@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Database,
   Download,
@@ -20,9 +20,22 @@ import {
   FolderTree,
   ShoppingBag,
   Settings as SettingsIcon,
+  Copy,
+  Check,
+  Code,
+  Sliders,
+  RotateCcw,
 } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
-import { supabase, checkSupabaseHealth, safeSupabaseOperation } from '../../lib/supabase';
+import { 
+  supabase, 
+  checkSupabaseHealth, 
+  safeSupabaseOperation, 
+  SUPABASE_RLS_FIX_SQL, 
+  getActiveSupabaseConfig, 
+  reconfigureSupabaseClient 
+} from '../../lib/supabase';
+import { initialProducts, initialCategories } from '../../data/initialData';
 import { Product, CategoryInfo, Order, StoreSettings } from '../../types';
 
 export const AdminBackupRestore: React.FC = () => {
@@ -40,6 +53,16 @@ export const AdminBackupRestore: React.FC = () => {
   const [isCheckingCloud, setIsCheckingCloud] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'connected' | 'error'>('idle');
   const [cloudMessage, setCloudMessage] = useState('');
+  const [isRlsDetected, setIsRlsDetected] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
+
+  // Configuração ativa do Supabase
+  const currentConfig = getActiveSupabaseConfig();
+  const [customUrlInput, setCustomUrlInput] = useState(currentConfig.url);
+  const [customKeyInput, setCustomKeyInput] = useState(currentConfig.anonKey);
+  const [isCustomConfig, setIsCustomConfig] = useState(currentConfig.isCustom);
   
   // File upload & preview state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -57,32 +80,103 @@ export const AdminBackupRestore: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Test Supabase Connection & Health
+  // Executa verificação inicial de conexão ao montar
+  useEffect(() => {
+    handleTestCloudConnection();
+  }, []);
+
+  // Test Supabase Connection & Health com diagnóstico RLS
   const handleTestCloudConnection = async () => {
     setIsCheckingCloud(true);
     setCloudStatus('idle');
     setCloudMessage('');
 
     try {
-      const health = await checkSupabaseHealth(3500);
+      const health = await checkSupabaseHealth(4000);
 
       if (health.online && health.status === 'healthy') {
         setCloudStatus('connected');
-        setCloudMessage(`Conexão ativa e respondendo! (${health.latencyMs}ms)`);
+        setIsRlsDetected(false);
+        setCloudMessage(`Conexão ativa e respondendo! (${health.latencyMs}ms) - Leitura pública e sincronização 100% liberadas.`);
         showToast('Conexão com Supabase verificada com sucesso!', 'success');
+      } else if (health.isRlsRestricted || health.status === 'rls_restricted') {
+        setCloudStatus('error');
+        setIsRlsDetected(true);
+        setCloudMessage(health.message);
+        showToast('Aviso de RLS/Permissão detectado. Modo fallback automático ativo: a loja está exibindo os produtos com segurança!', 'info');
       } else {
         setCloudStatus('error');
+        setIsRlsDetected(false);
         setCloudMessage(
           health.message || 'Banco do Supabase retornou status unhealthy / inacessível. O modo de segurança local está ativo.'
         );
-        showToast('Supabase indisponível. A loja está operando com persistência LocalStorage + Backup JSON.', 'info');
+        showToast('Supabase operando em modo fallback local.', 'info');
       }
     } catch (err: any) {
       setCloudStatus('error');
+      setIsRlsDetected(false);
       setCloudMessage(`Falha de conexão: ${err?.message || 'Servidor inacessível'}. Modo local ativo.`);
-      showToast('Supabase indisponível no momento.', 'info');
+      showToast('Supabase indisponível no momento. Fallback local ativo.', 'info');
     } finally {
       setIsCheckingCloud(false);
+    }
+  };
+
+  const handleCopySql = () => {
+    try {
+      navigator.clipboard.writeText(SUPABASE_RLS_FIX_SQL);
+      setSqlCopied(true);
+      showToast('Comando SQL copiado com sucesso!', 'success');
+      setTimeout(() => setSqlCopied(false), 3000);
+    } catch {
+      showToast('Selecione e copie o texto manualmente.', 'info');
+    }
+  };
+
+  const handleSaveCustomConfig = () => {
+    if (!customUrlInput.trim() || !customKeyInput.trim()) {
+      showToast('Preencha a URL e a Anon Key do Supabase.', 'error');
+      return;
+    }
+    reconfigureSupabaseClient(customUrlInput.trim(), customKeyInput.trim());
+    setIsCustomConfig(true);
+    showToast('Novas credenciais salvas! Testando conexão...', 'info');
+    handleTestCloudConnection();
+  };
+
+  const handleResetDefaultConfig = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('majoca_custom_supabase_url');
+      localStorage.removeItem('majoca_custom_supabase_key');
+    }
+    const def = getActiveSupabaseConfig();
+    setCustomUrlInput(def.url);
+    setCustomKeyInput(def.anonKey);
+    setIsCustomConfig(false);
+    reconfigureSupabaseClient(def.url, def.anonKey);
+    showToast('Credenciais restauradas para o padrão.', 'info');
+    handleTestCloudConnection();
+  };
+
+  const handleRestoreInitialCatalog = async () => {
+    if (!window.confirm('Deseja restaurar o catálogo de fábrica completo da Majoca Moda? Serão restaurados os 11 produtos infantojuvenis e as 4 categorias oficiais.')) {
+      return;
+    }
+    setIsRestoring(true);
+    try {
+      const res = await restoreData({
+        products: initialProducts,
+        categories: initialCategories,
+      });
+      if (res.success) {
+        showToast(`Catálogo de fábrica restaurado: ${res.counts.products} produtos e ${res.counts.categories} categorias!`, 'success');
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (e: any) {
+      showToast(`Erro ao restaurar: ${e?.message}`, 'error');
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -344,14 +438,170 @@ export const AdminBackupRestore: React.FC = () => {
           </div>
         </div>
 
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowConfigPanel(!showConfigPanel)}
+            className="flex-1 sm:flex-initial px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-stone-200"
+            title="Configurar credenciais do Supabase"
+          >
+            <Sliders className="w-3.5 h-3.5 text-stone-500" />
+            <span>Configurar Conexão</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTestCloudConnection}
+            disabled={isCheckingCloud}
+            className="flex-1 sm:flex-initial px-4 py-2 bg-[#FF751F] hover:bg-[#e06112] text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isCheckingCloud ? 'animate-spin' : ''}`} />
+            <span>{isCheckingCloud ? 'Verificando...' : 'Testar Conexão'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2.1 PAINEL DE CONFIGURAÇÃO DE CREDENCIAIS (EXPANSÍVEL) */}
+      {showConfigPanel && (
+        <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-[#FF751F]" />
+              <h4 className="font-heading font-bold text-sm text-[#3D2518]">
+                Ajustar Credenciais da Nuvem Supabase
+              </h4>
+              {isCustomConfig && (
+                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  Personalizado no Navegador
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleResetDefaultConfig}
+              className="text-xs text-stone-500 hover:text-stone-700 underline cursor-pointer"
+            >
+              Restaurar Padrão
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-stone-700 mb-1">
+                Supabase URL (Endpoint do Projeto)
+              </label>
+              <input
+                type="text"
+                value={customUrlInput}
+                onChange={(e) => setCustomUrlInput(e.target.value)}
+                placeholder="https://exemplo.supabase.co"
+                className="w-full text-xs font-mono px-3.5 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-[#FF751F]/40"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-700 mb-1">
+                Supabase Anon / Public Key
+              </label>
+              <input
+                type="password"
+                value={customKeyInput}
+                onChange={(e) => setCustomKeyInput(e.target.value)}
+                placeholder="eyJhbGciOiJIUz..."
+                className="w-full text-xs font-mono px-3.5 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-[#FF751F]/40"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleSaveCustomConfig}
+              className="px-4 py-2 bg-stone-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+            >
+              Salvar Credenciais e Conectar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2.2 BANNER DE DIAGNÓSTICO E CORREÇÃO DE RLS COM FALLBACK GARANTIDO */}
+      {isRlsDetected && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-5 sm:p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldCheck className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="space-y-2 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-amber-200 text-amber-900 text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Aviso de RLS Detectado
+                </span>
+                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Fallback Automático Ativo
+                </span>
+              </div>
+
+              <h4 className="font-heading font-bold text-sm sm:text-base text-amber-950">
+                A loja está 100% visível e funcional para todos os visitantes!
+              </h4>
+
+              <p className="text-xs text-amber-800 leading-relaxed max-w-3xl">
+                O Supabase reportou restrição de segurança (RLS ou chave). Graças ao <strong>fallback automático</strong> implementado, a loja exibe os produtos diretamente do backup e catálogo inicial, garantindo que nenhum cliente encontre uma vitrine vazia.
+              </p>
+
+              <div className="p-3.5 bg-amber-100/70 rounded-2xl border border-amber-200/80 font-mono text-[11px] text-amber-900 overflow-x-auto">
+                <code>ALTER TABLE produtos DISABLE ROW LEVEL SECURITY;</code>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="px-4 py-2 bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  {sqlCopied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{sqlCopied ? 'Comando SQL Copiado!' : 'Copiar Script SQL para Supabase'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSqlModal(!showSqlModal)}
+                  className="px-3.5 py-2 bg-white hover:bg-amber-100/60 text-amber-900 text-xs font-bold rounded-xl transition-colors border border-amber-300 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Code className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{showSqlModal ? 'Ocultar Script Completo' : 'Ver Script SQL Completo'}</span>
+                </button>
+              </div>
+
+              {showSqlModal && (
+                <div className="mt-3 p-4 bg-stone-900 text-amber-100 rounded-2xl font-mono text-xs overflow-x-auto max-h-60 leading-relaxed border border-stone-700">
+                  <pre>{SUPABASE_RLS_FIX_SQL}</pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2.3 BOTÃO DE RESTAURAÇÃO RÁPIDA DO CATÁLOGO DE FÁBRICA */}
+      <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-200/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#FF751F] flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div className="text-xs text-[#5A3825]">
+            <span className="font-bold text-[#3D2518]">Catálogo de Fábrica da Majoca Moda:</span>{' '}
+            Contém 11 produtos autênticos com fotos, descrições, estoques e tamanhos do RN ao 18 anos.
+          </div>
+        </div>
         <button
           type="button"
-          onClick={handleTestCloudConnection}
-          disabled={isCheckingCloud}
-          className="w-full sm:w-auto px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer border border-stone-200 disabled:opacity-50"
+          onClick={handleRestoreInitialCatalog}
+          disabled={isRestoring}
+          className="px-3.5 py-2 bg-white hover:bg-orange-100 text-[#FF751F] font-bold text-xs rounded-xl border border-orange-300 transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isCheckingCloud ? 'animate-spin text-[#FF751F]' : ''}`} />
-          <span>{isCheckingCloud ? 'Verificando...' : 'Testar Conexão'}</span>
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Restaurar Catálogo Padrão</span>
         </button>
       </div>
 
